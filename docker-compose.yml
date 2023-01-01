@@ -1,0 +1,41 @@
+version: "3.8"
+x-common:
+  database:
+    &db-environment
+#    Change these! These are sensitive secrets.
+    MYSQL_USER: &db-user "freebooter"  # Only change the username
+    MYSQL_PASSWORD: &db-password "password"  # Only change the password
+    MYSQL_ROOT_PASSWORD: "root-password"  # Only change the password
+services:
+  mariadb:
+    image: mariadb:10
+    hostname: maraiadb
+    restart: always
+    environment:
+      <<: *db-environment
+      MYSQL_DATABASE: "freebooter"
+    volumes:
+      - mariadb:/var/lib/mysql
+  freebooter:
+    image: ghcr.io/regulad/freebooter:master
+    build: .
+    restart: always
+    environment:
+      # MariaDB connection
+      FREEBOOTER_MYSQL_HOST: mariadb
+      FREEBOOTER_MYSQL_PORT: 3306
+      FREEBOOTER_MYSQL_DATABASE: "freebooter"
+      FREEBOOTER_MYSQL_USER: *db-user
+      FREEBOOTER_MYSQL_PASSWORD: *db-password
+      # Freebooter setup
+      FREEBOOTER_IN_CHANNELS: ""
+      FREEBOOTER_OUT_CHANNELS: ""
+    volumes:
+      - config:/app/config
+      - scratch:/app/scratch
+    depends_on:
+      - mariadb
+volumes:
+  mariadb:
+  config:
+  scratch:
