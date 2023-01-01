@@ -14,9 +14,10 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
-ENV PYTHONFAULTHANDLER=1 \
+ENV DEBIAN_FRONTEND=noninteractive \
+  PYTHONFAULTHANDLER=1 \
   PYTHONUNBUFFERED=1 \
   PYTHONHASHSEED=random \
   PIP_NO_CACHE_DIR=off \
@@ -25,8 +26,14 @@ ENV PYTHONFAULTHANDLER=1 \
   POETRY_HOME=/opt/poetry \
   POETRY_VERSION=1.3.1
 
+# Add curl for MariaDB script
+RUN apt update && apt upgrade -y && apt install -y curl
+
+# Add MariaDB apt repositories with script
+RUN curl -sS https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
+
 # Add dependencies
-RUN apk add curl ffmpeg
+RUN apt update && apt upgrade -y && apt install -y ffmpeg libmariadb3 libmariadb-dev gcc
 
 # Install poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
@@ -38,7 +45,7 @@ WORKDIR /app
 COPY poetry.lock pyproject.toml /app/
 
 # Project initialization:
-RUN /opt/poetry/bin/poetry install --without dev --no-interaction --no-ansi
+RUN /opt/poetry/bin/poetry install --without dev --no-interaction --no-ansi --no-root
 
 # Creating folders, and files for a project:
 COPY . /app
