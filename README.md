@@ -1,6 +1,6 @@
 # freebooter
 
-[![wakatime](https://wakatime.com/badge/regulad/freebooter/coda-wakatime.svg)](https://wakatime.com)
+[![wakatime](https://wakatime.com/badge/github/regulad/freebooter.svg)](https://wakatime.com/badge/github/regulad/freebooter)
 
 `freebooter` downloads photos & videos from the internet and uploads it onto your social media accounts.
 
