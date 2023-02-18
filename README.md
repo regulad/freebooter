@@ -1,6 +1,8 @@
 # freebooter
 
 [![wakatime](https://wakatime.com/badge/github/regulad/freebooter.svg)](https://wakatime.com/badge/github/regulad/freebooter)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/nefarium/freebooter/docker-publish.yml)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/nefarium/freebooter/master.svg)](https://results.pre-commit.ci/latest/github/nefarium/freebooter/master)
 
 `freebooter` downloads photos & videos from the internet and uploads it onto your social media accounts.
 
