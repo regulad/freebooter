@@ -1,0 +1,152 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://regulad.xyz/freebooter/freebooter/assets/client-secret-schema.json",
+    "title": "Freebooter Configuration",
+    "description": "Configuration for the Freebooter service",
+    "type": "object",
+    "definitions": {
+        "middleware": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the middleware."
+                },
+                "type": {
+                    "type": "string",
+                    "description": "The type of middleware. This is used to determine which middleware to use."
+                },
+                "config": {
+                    "type": "object",
+                    "description": "The configuration for the middleware.",
+                    "additionalProperties": {
+                        "type": [
+                            "string",
+                            "integer",
+                            "number",
+                            "boolean",
+                            "null",
+                            "array",
+                            "object"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "name",
+                "type",
+                "config"
+            ]
+        },
+        "watcher": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the watcher."
+                },
+                "type": {
+                    "type": "string",
+                    "description": "The type of watcher. This is used to determine which watcher to use."
+                },
+                "config": {
+                    "type": "object",
+                    "description": "The configuration for the watcher.",
+                    "additionalProperties": {
+                        "type": [
+                            "string",
+                            "integer",
+                            "number",
+                            "boolean",
+                            "null",
+                            "array",
+                            "object"
+                        ]
+                    }
+                },
+                "preprocessors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/middleware"
+                    },
+                    "description": "The middleware(s) to run before uploading."
+                }
+            },
+            "required": [
+                "name",
+                "type",
+                "config",
+                "preprocessors"
+            ]
+        },
+        "uploader": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the uploader."
+                },
+                "type": {
+                    "type": "string",
+                    "description": "The type of uploader. This is used to determine which uploader to use."
+                },
+                "config": {
+                    "type": "object",
+                    "description": "The configuration for the uploader.",
+                    "additionalProperties": {
+                        "type": [
+                            "string",
+                            "integer",
+                            "number",
+                            "boolean",
+                            "null",
+                            "array",
+                            "object"
+                        ]
+                    }
+                },
+                "preprocessors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/middleware"
+                    },
+                    "description": "The preprocessing middleware(s) to run before passing the file off to the other middlewares."
+                }
+            },
+            "required": [
+                "name",
+                "type",
+                "config",
+                "preprocessors"
+            ]
+        }
+    },
+    "properties": {
+        "middlewares": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/middleware"
+            },
+            "description": "Middlewares that will process data inbetween the uploaders and the watchers."
+        },
+        "watchers": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/watcher"
+            },
+            "description": "Watchers that will watch for new files or generate new files for uploaders to upload."
+        },
+        "uploaders": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/uploader"
+            },
+            "description": "Uploaders that will upload files to various services."
+        }
+    },
+    "required": [
+        "middlewares",
+        "watchers",
+        "uploaders"
+    ]
+}

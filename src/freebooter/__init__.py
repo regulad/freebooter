@@ -16,5 +16,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from .common import *
-from .youtube import *
+from .file_management import *
+from .metadata import *
+from .middlewares import *
+from .uploaders import *
+from .watchers import *
+
+version = "0.1.0"

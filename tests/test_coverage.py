@@ -16,3 +16,5 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
+
+from freebooter import *  # only doing this to remind me how poor coverage is

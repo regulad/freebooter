@@ -15,6 +15,15 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+from __future__ import annotations
 
-from .common import *
-from .youtube import *
+from importlib.resources import files
+
+PACKAGE_ROOT = files("freebooter")
+
+ASSETS = PACKAGE_ROOT / "assets"
+
+__all__ = (
+    "PACKAGE_ROOT",
+    "ASSETS",
+)

@@ -15,10 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+from __future__ import annotations
 
-from .file_management import *
+from .collector import *
+from .common import *
 from .metadata import *
-from .uploaders import *
-from .watchers import *
-
-version = "0.1.0"

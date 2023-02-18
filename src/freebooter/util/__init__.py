@@ -15,18 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-from importlib.resources import files
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
-if TYPE_CHECKING:
-    from importlib.abc import Traversable
-
-# This file is currently unused. In the future, it will be used for the CLI/Docker interface validating files.
-
-_PACKAGE_ROOT: "Traversable" = files("freebooter")  # may not be ideal?
-
-ASSETS: "Traversable" = _PACKAGE_ROOT / "assets"
-
-__all__: tuple[str] = (
-    "ASSETS",
-)
+from .frozen_dict import *
+from .loader import *

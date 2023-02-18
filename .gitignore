@@ -164,3 +164,6 @@ config/
 
 # Scratch Data
 scratch/
+
+# Output
+output/

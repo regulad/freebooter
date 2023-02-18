@@ -15,29 +15,31 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-from threading import Lock
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
-if TYPE_CHECKING:
-    from ..file_management import ScratchFile
-    from ..metadata import MediaMetadata
-
-
-class Uploader:
-    def __init__(self) -> None:
-        self._lock: "Lock" = Lock()
-
-    def handle_upload(self, file: "ScratchFile", metadata: "MediaMetadata") -> "MediaMetadata | None":
-        raise NotImplementedError
-
-    def upload(self, file: "ScratchFile", metadata: "MediaMetadata") -> "MediaMetadata | None":
-        with self._lock:
-            return self.handle_upload(file, metadata)
-
-    def close(self) -> None:
-        pass
+from .common import *
+from ..file_management import ScratchFile
+from ..metadata import MediaMetadata
+from ..middlewares import Middleware
 
 
-__all__: tuple[str] = (
-    "Uploader",
-)
+class Pusher(Watcher):
+    """
+    Periodically pushes empty media into the uploading flow. This is useful if you have a collector for counting the
+    number of posts, while also having an uploader that has a rate limit to follow.
+    """
+
+    MYSQL_TYPE = None
+
+    def __init__(
+        self, name: str, preprocessors: list[Middleware], *, interval: int, **config
+    ) -> None:
+        super().__init__(name, preprocessors, **config)
+
+        self.SLEEP_TIME = interval
+
+    def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
+        return []
+
+
+__all__ = ("Pusher",)

@@ -1,0 +1,33 @@
+default_language_version:
+    python: python3.11
+default_stages: [commit, push]
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+    - id: check-yaml
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
+    - id: check-symlinks
+    - id: check-case-conflict
+    - id: fix-byte-order-marker
+    - id: end-of-file-fixer
+    - id: check-merge-conflict
+    - id: debug-statements
+    - id: check-toml
+    - id: check-json
+    - id: detect-private-key
+    - id: check-added-large-files
+- repo: https://github.com/Lucas-C/pre-commit-hooks-nodejs
+  rev: v1.1.2
+  hooks:
+    - id: dockerfile_lint
+- repo: https://github.com/psf/black
+  rev: 23.1.0
+  hooks:
+  - id: black
+- repo: https://github.com/python-poetry/poetry
+  rev: 1.3.2
+  hooks:
+    - id: poetry-check
+#    - id: poetry-lock  # broken on pre-commit.ci

@@ -11,13 +11,15 @@ services:
     image: mariadb:10
     hostname: maraiadb
     restart: always
+    ports:
+      - "3306:3306/tcp"
     environment:
       <<: *db-environment
       MYSQL_DATABASE: "freebooter"
     volumes:
       - mariadb:/var/lib/mysql
   freebooter:
-    image: ghcr.io/regulad/freebooter:master
+    image: ghcr.io/nefarium/freebooter:latest
     build: .
     restart: always
     environment:
@@ -27,9 +29,9 @@ services:
       FREEBOOTER_MYSQL_DATABASE: "freebooter"
       FREEBOOTER_MYSQL_USER: *db-user
       FREEBOOTER_MYSQL_PASSWORD: *db-password
-      # Freebooter setup
-      FREEBOOTER_IN_CHANNELS: ""
-      FREEBOOTER_OUT_CHANNELS: ""
+      # Freebooter configuration
+      # FREEBOOTER_DISCORD_WEBHOOK: "https://discord.com/api/webhooks/12345/abcde"
+      # FREEBOOTER_DISCORD_WEBHOOK_MESSAGE: "<@12345>"
     volumes:
       - config:/app/config
       - scratch:/app/scratch

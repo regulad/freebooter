@@ -15,34 +15,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-from typing import TypedDict
+from __future__ import annotations
 
-
-# I don't particularly like this. This is for typing only.
-
-class OAuth2Token(TypedDict):
-    access_token: str
-    expires_in: int
-    refresh_token: str
-    scope: list[str]
-    token_type: str
-    expires_at: float
-
-
-class ClientSecretSet(TypedDict):
-    client_id: str
-    client_secret: str
-    redirect_uris: list[str]
-    auth_uri: str
-    token_uri: str
-
-
-class DesktopAppClientSecrets(TypedDict):
-    installed: ClientSecretSet
-
-
-__all__: tuple[str] = (
-    "OAuth2Token",
-    "ClientSecretSet",
-    "DesktopAppClientSecrets",
-)
+from .common import *
+from .instagram_instagrapi import *
+from .save_local import *
+from .youtube_dataapi import *
