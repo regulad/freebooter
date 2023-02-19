@@ -20,6 +20,7 @@ from __future__ import annotations
 from logging import Logger
 from logging import getLogger
 from traceback import format_exc
+from typing import Generator
 
 from .ytdl_common import YTDLWatcher
 from ..file_management import ScratchFile
@@ -94,9 +95,7 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
         else:
             try:
                 scratch_file, metadata = self._download(video_id)
-
                 self.mark_handled(video_id, True)
-
                 return scratch_file, metadata
             except Exception as e:
                 self.logger.exception(f"Error downloading video {video_id}: {e}")
@@ -146,14 +145,23 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
                 )
                 return []
 
-            videos: list[dict] = chosen_playlist["entries"]
+            videos: Generator[dict, None, None] = chosen_playlist["entries"]
+            video_list: list[dict] = list(videos)
+
+            video_list.reverse()  # get the oldest videos first
 
             # Now, let's download the videos
             ready_prepared: list[tuple[ScratchFile, MediaMetadata]] = []
-            for video in videos:
+            if not self._backtrack:
+                video = video_list[-1]
                 prepared = self._prepare_video(video["id"], self._copy)
                 if prepared is not None:
                     ready_prepared.append(prepared)
+            else:
+                for video in video_list:
+                    prepared = self._prepare_video(video["id"], self._copy)
+                    if prepared is not None:
+                        ready_prepared.append(prepared)
 
             if self._copy:
                 self._copy = False
