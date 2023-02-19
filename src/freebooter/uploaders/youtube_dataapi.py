@@ -23,8 +23,8 @@ from io import IOBase
 from logging import Logger
 from logging import getLogger
 from traceback import format_exc
-from typing import Any, TypedDict
 from typing import TYPE_CHECKING, cast
+from typing import TypedDict
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -226,11 +226,10 @@ class YouTubeDataAPIV3Uploader(Uploader):
     def _upload_one(
         self, file: ScratchFile, metadata: MediaMetadata
     ) -> MediaMetadata | None:
+        media_file_upload: MediaFileUpload = MediaFileUpload(
+            str(file.path), chunksize=-1, resumable=True
+        )
         try:
-            media_file_upload: MediaFileUpload = MediaFileUpload(
-                str(file.path), chunksize=-1, resumable=True
-            )
-
             videos_resource: YouTubeResource.VideosResource = (
                 self._youtube_oauth_resource.videos()
             )
@@ -262,7 +261,7 @@ class YouTubeDataAPIV3Uploader(Uploader):
                 tags=response["snippet"].get("tags", []),  # sometimes not present
                 categories=[category_name] if category_name else [],
                 data=cast(dict, response["snippet"]),
-                type_=MediaType.VIDEO,
+                media_type=MediaType.VIDEO,
             )
         except HttpError as http_error:
             logger.error(
@@ -271,14 +270,9 @@ class YouTubeDataAPIV3Uploader(Uploader):
             logger.exception(format_exc())
             return None
         finally:
-            # the following cleanup calls aren't the most pythonic,
-            # but they are easy to do and doing more would be hack and probably not worth the effort
-            known_locals: dict[str, Any] = locals()
-            if "media_file_upload" in known_locals:
-                media_file_upload: MediaFileUpload = known_locals["media_file_upload"]  # type: ignore  # hacky
-                media_stream: IOBase = media_file_upload.stream()  # type: ignore  # the stubs did this wrong
-                if not media_stream.closed:
-                    media_stream.close()
+            media_stream: IOBase = cast("IOBase", media_file_upload.stream())
+            if not media_stream.closed:
+                media_stream.close()
 
 
 __all__ = ("YouTubeDataAPIV3Uploader", "YOUTUBE_UPLOAD_SCOPE")

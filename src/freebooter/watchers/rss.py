@@ -43,6 +43,7 @@ class RSSWatcher(YTDLWatcher):
         headers: dict | None = None,
         proxies: dict | None = None,
         retry_count: int = 5,
+        copy: bool = False,
         **config,
     ) -> None:
         super().__init__(name, preprocessors, **config)
@@ -61,6 +62,7 @@ class RSSWatcher(YTDLWatcher):
             self._ytdl_params.setdefault("proxies", proxies)
 
         self.url = url
+        self._copy = copy
 
     @classmethod
     def choose_best_watcher(
@@ -149,7 +151,7 @@ class RSSWatcher(YTDLWatcher):
                         description=entry["summary"],
                         tags=[tags["term"] for tags in entry["tags"]],
                         categories=[],
-                        type_=MediaType.from_mime_type(mime_type),
+                        media_type=MediaType.from_mime_type(mime_type),
                         data=dict(entry),
                     )
 
@@ -163,11 +165,19 @@ class RSSWatcher(YTDLWatcher):
         with self._session.get(self.url) as response:
             feed = feedparser.parse(response.text)
 
-            return [
+            run = [
                 parsed_entry
-                for parsed_entry in [self._parse_entry(entry) for entry in feed.entries]
+                for parsed_entry in [
+                    self._parse_entry(entry, handle_if_already_handled=self._copy)
+                    for entry in feed.entries
+                ]
                 if parsed_entry is not None
             ]
+
+            if self._copy:
+                self._copy = False
+
+            return run
 
 
 class RedditWatcher(RSSWatcher):

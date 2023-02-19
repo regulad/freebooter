@@ -44,6 +44,7 @@ from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
 from mariadb import ConnectionPool
 from oauthlib.oauth2 import OAuth2Token
+from pillow_heif import register_heif_opener
 
 from . import *
 from ._assets import *
@@ -54,6 +55,9 @@ from .util import (
 
 logger: Logger = getLogger(__name__)
 rootLogger = Logger.root
+
+# Init helper libraries
+register_heif_opener()  # Enables Pillow to open HEIF files
 
 
 def authorize_youtube_data_api() -> None:

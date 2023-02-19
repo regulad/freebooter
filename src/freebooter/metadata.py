@@ -17,14 +17,17 @@
 """
 from __future__ import annotations
 
+import mimetypes
 from enum import Enum, auto
 from logging import getLogger
+from pathlib import Path
 from typing import Any
 
 logger = getLogger(__name__)
 
 
 class Platform(Enum):
+    OTHER = auto()
     YOUTUBE = auto()
     TIKTOK = auto()
     INSTAGRAM = auto()
@@ -45,17 +48,26 @@ class Platform(Enum):
 
 
 class MediaType(Enum):
+    UNKNOWN = auto()
     PHOTO = auto()
     VIDEO = auto()
 
     @classmethod
-    def from_mime_type(cls, mime_type: str) -> MediaType:
-        if mime_type.startswith("image"):
+    def from_mime_type(cls, mime_type: str | None) -> MediaType:
+        if mime_type is None:
+            return cls.UNKNOWN
+        elif mime_type.startswith("image"):
             return cls.PHOTO
         elif mime_type.startswith("video"):
             return cls.VIDEO
         else:
-            raise ValueError("Unknown media type")
+            logger.warning(f"Unknown media type: {mime_type}! Defaulting to UNKNOWN...")
+            return cls.UNKNOWN
+
+    @classmethod
+    def from_file_path(cls, file_path: Path) -> MediaType:
+        mime_type, _ = mimetypes.guess_type(file_path)
+        return cls.from_mime_type(mime_type)
 
     @classmethod
     def from_ffprobe_output(cls, output: dict) -> MediaType:
@@ -72,14 +84,27 @@ class MediaType(Enum):
         """
         output_format = output["format"]
         format_name = output_format["format_name"]
+
+        if "mp4" in format_name:
+            return cls.VIDEO
+
         match format_name:
+            case "gif":
+                return cls.PHOTO
+            case "png_pipe":
+                return cls.PHOTO
+            case "tiff_pipe":
+                return cls.PHOTO
             case "image2":
                 return cls.PHOTO
             case "matroska,webm":
                 return cls.VIDEO
             case _:
-                logger.info(f"Unknown media type: {format_name}")
-                return cls.VIDEO
+                logger.warning(
+                    f"Unknown media type: {format_name}! Attempting to search from file path..."
+                )
+                file = Path(output_format["filename"])
+                return cls.from_file_path(file)
 
 
 class MediaMetadata:
@@ -102,7 +127,7 @@ class MediaMetadata:
         description: str | None,
         tags: list[str],
         categories: list[str],
-        type_: MediaType,
+        media_type: MediaType,
         data: dict[str, Any] | None = None,
     ) -> None:
         self._id = media_id
@@ -111,7 +136,7 @@ class MediaMetadata:
         self._description = description
         self._tags = tags
         self._categories = categories
-        self._type = type_
+        self._type = media_type
         self._data = data or {}
 
     @classmethod

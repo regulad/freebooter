@@ -32,7 +32,13 @@ from .uploaders import (
     LocalMediaStorage,
 )
 from .util import FrozenDict
-from .watchers import Watcher, YTDLYouTubeChannelWatcher, Pusher, RSSWatcher
+from .watchers import (
+    Watcher,
+    YTDLYouTubeChannelWatcher,
+    Pusher,
+    RSSWatcher,
+    LocalMediaLoader,
+)
 
 SWAPPED_ORDER_VALIDATE = lambda schema, instance, *args, **kwargs: jsonschema.validate(
     instance, schema, *args, **kwargs
@@ -57,6 +63,7 @@ WATCHERS: Mapping[str, Type[Watcher]] = FrozenDict(
         "youtube": YTDLYouTubeChannelWatcher,
         "rss": RSSWatcher.choose_best_watcher,  # type: ignore  # hacky but works fine
         "pusher": Pusher,
+        "local": LocalMediaLoader,
     }
 )
 

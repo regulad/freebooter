@@ -104,7 +104,7 @@ class MetadataModifier(Middleware):
             categories=(self._categories or [])
             if self._categories is not Missing
             else metadata.categories,
-            type_=metadata.type,
+            media_type=metadata.type,
             data=metadata.data,
         )
 

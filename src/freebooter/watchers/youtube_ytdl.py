@@ -35,6 +35,7 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
     """
 
     MYSQL_TYPE = "CHAR(24)"
+    SLEEP_TIME = 60 * 60 * 1  # one hour
 
     def __init__(
         self,
@@ -43,6 +44,8 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
         *,
         channel_id: str,
         playlist: str | None = None,
+        shorts: bool = False,
+        backtrack: bool = False,
         copy: bool = False,
         **config,
     ) -> None:
@@ -51,10 +54,10 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
         :param ytdl_params: Parameters to pass to youtube-dl
         """
 
-        assert channel_id.startswith("UC"), "Channel ID must start with UC"
-        assert len(channel_id) == 24, "Channel ID must be 24 characters long"
-
-        name = f"yt-ytdl-{channel_id}" or name  # will never be used
+        if not (channel_id.startswith("UC") and len(channel_id) == 24):
+            raise ValueError(
+                "Invalid channel ID. Channel ID must start with UC and be 24 characters long"
+            )
 
         super().__init__(
             name,
@@ -64,7 +67,9 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
 
         self._channel_id = channel_id
         self._playlist = playlist
+        self._shorts = shorts
         self._copy = copy
+        self._backtrack = backtrack
 
     @property
     def _channel_url(self) -> str:
@@ -116,25 +121,30 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
 
             # Now, we need to select the desired playlist.
             chosen_playlist: dict | None = None
-            if self._playlist is None:
+            if self._shorts and self._playlist is None:
                 for playlist in playlists:
-                    if (
-                        playlist_title := playlist.get("title")
-                    ) is not None and "Videos" in playlist_title:
+                    playlist_title = playlist.get("title")
+                    if playlist_title is not None and "- Shorts" in playlist_title:
+                        chosen_playlist = playlist
+                        break
+            elif not self._shorts and self._playlist is None:
+                for playlist in playlists:
+                    playlist_title = playlist.get("title")
+                    if playlist_title is not None and "- Videos" in playlist_title:
                         chosen_playlist = playlist
                         break
             else:
                 for playlist in playlists:
-                    if (
-                        playlist_title := playlist.get("title")
-                    ) is not None and self._playlist == playlist_title:
+                    playlist_title = playlist.get("title")
+                    if playlist_title is not None and self._playlist == playlist_title:
                         chosen_playlist = playlist
                         break
 
-            assert chosen_playlist is not None, (
-                f"Could not find the playlist {self._playlist} "
-                f"on channel {self._channel_id}"
-            )
+            if chosen_playlist is None:
+                self.logger.error(
+                    f"Could not find playlist {self._playlist} on channel {self._channel_id}!"
+                )
+                return []
 
             videos: list[dict] = chosen_playlist["entries"]
 
@@ -144,6 +154,10 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
                 prepared = self._prepare_video(video["id"], self._copy)
                 if prepared is not None:
                     ready_prepared.append(prepared)
+
+            if self._copy:
+                self._copy = False
+
             return ready_prepared
         except Exception as e:
             logger.exception(f"Error checking for uploads: {e}")

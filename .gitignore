@@ -165,5 +165,6 @@ config/
 # Scratch Data
 scratch/
 
-# Output
+# Media I/O
+input/
 output/

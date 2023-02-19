@@ -20,4 +20,5 @@ from __future__ import annotations
 from .common import *
 from .pusher import *
 from .rss import *
+from .upload_local import *
 from .youtube_ytdl import *

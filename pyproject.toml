@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freebooter"
-version = "1.0.0"
+version = "1.1.0"
 description = "freebooter downloads photos & videos from the internet and uploads it onto your social media accounts."
 authors = ["Parker Wahle <regulad@regulad.xyz>"]
 license = "GPLv3"
@@ -35,6 +35,7 @@ beautifulsoup4 = "^4.11.2"
 pyotp = "^2.8.0"
 dislog = {extras = ["speed", "sync"], version = "^2.2.1"}
 moviepy = ">=1.0.3"  # unlisted dependency of instagrapi
+pillow-heif = "^0.9.3"
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.4.5"
@@ -59,6 +60,7 @@ types-oauthlib = "^3.2.0.3"
 types-pyyaml = "^6.0.12.5"
 types-requests = "^2.28.11.13"
 types-beautifulsoup4 = "^4.11.6.6"
+types-pillow = "^9.4.0.13"
 
 [tool.poetry.scripts]
 freebooter = "freebooter.__main__:main"

@@ -35,9 +35,13 @@ services:
     volumes:
       - config:/app/config
       - scratch:/app/scratch
+      # - input:/app/input
+      # - output:/app/output
     depends_on:
       - mariadb
 volumes:
   mariadb:
   config:
   scratch:
+  # input:
+  # output:

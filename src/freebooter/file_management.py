@@ -104,8 +104,6 @@ class ScratchFile:
 
     def close(self) -> None:
         with self._closing_lock:
-            assert not self.closed, "Close was called more than once!"
-
             # ScratchFile would be a context manager, but it's not possible to use it as one because
             # it's not guaranteed to be used in a thread-safe manner.
 
@@ -119,7 +117,7 @@ class ScratchFile:
             if self._delete:
                 self._path.unlink(missing_ok=True)
 
-            assert self.closed, "Close did not complete sucessfully!"
+            assert self.closed, "File was not closed correctly!"
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()

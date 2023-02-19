@@ -24,6 +24,7 @@ import typing
 from threading import Lock
 from typing import Any, Literal
 
+from PIL import Image
 from instagrapi import Client
 from instagrapi.exceptions import (
     BadPassword,
@@ -168,10 +169,11 @@ class InstagrapiUploader(Uploader):
             self._sleeping_until = unfreeze_at
 
             # BLOCKING
-            sleep_for_seconds = max((unfreeze_at - time_now).total_seconds(), 0)
+            until_delta = unfreeze_at - time_now
             self.logger.warning(
-                f"Freezing for {reason} until {unfreeze_at}! ({sleep_for_seconds} seconds)"
+                f'Freezing for "{reason}" until {unfreeze_at}! ({until_delta})'
             )
+            sleep_for_seconds = max(until_delta.total_seconds(), 0)  # can't be under 0
             time.sleep(sleep_for_seconds)
 
             self._sleeping_until = None
@@ -283,6 +285,8 @@ class InstagrapiUploader(Uploader):
     def upload(
         self, medias: list[tuple[ScratchFile, MediaMetadata]]
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
+        assert self._file_manager is not None, "FileManager is None"
+
         instagram_medias: list[tuple[ScratchFile, InstagramMedia | Story | None]] = []
 
         match self._mode:
@@ -291,14 +295,61 @@ class InstagrapiUploader(Uploader):
                     try:
                         match metadata.type:
                             case MediaType.PHOTO:
-                                instagram_medias.append(
-                                    (
-                                        media,
-                                        self._iclient.photo_upload(
-                                            media.path, metadata.description
-                                        ),
+                                file_extension = media.path.suffix
+
+                                # this is not the most reliable way of detecting file types, but ffprobe is weird man
+                                if file_extension == ".gif":
+                                    # Instagram doesn't like gifs.
+                                    # We will need to do some special handling to extract the first frame.
+
+                                    with self._file_manager.get_file(
+                                        file_extension=".jpg"
+                                    ) as temp_file:
+                                        with Image.open(media.path) as gif:
+                                            gif.seek(0)
+                                            with gif.convert("RGB") as image:
+                                                image.save(temp_file.path, "JPEG")
+
+                                        instagram_medias.append(
+                                            (
+                                                media,
+                                                self._iclient.photo_upload(
+                                                    temp_file.path, metadata.description
+                                                ),
+                                            )
+                                        )
+                                elif file_extension not in [".jpg", ".jpeg"]:
+                                    # e.g. .tiff .webp
+
+                                    # Instagram doesn't like non-jpg images. We need to convert them to jpegs.
+                                    # Instagram says that it can handle PNG, but I couldn't get it to work.
+                                    # Same goes for HEIC/HEIF.
+
+                                    with self._file_manager.get_file(
+                                        file_extension=".jpg"
+                                    ) as temp_file:
+                                        with Image.open(
+                                            media.path
+                                        ) as image, image.convert("RGB") as rgb_image:
+                                            rgb_image.save(temp_file.path, "JPEG")
+
+                                        instagram_medias.append(
+                                            (
+                                                media,
+                                                self._iclient.photo_upload(
+                                                    temp_file.path, metadata.description
+                                                ),
+                                            )
+                                        )
+                                else:
+                                    instagram_medias.append(
+                                        (
+                                            media,
+                                            self._iclient.photo_upload(
+                                                media.path, metadata.description
+                                            ),
+                                        )
                                     )
-                                )
                             case MediaType.VIDEO:
                                 instagram_medias.append(
                                     (
@@ -387,7 +438,7 @@ class InstagrapiUploader(Uploader):
                     description=instagram_media.caption_text,
                     tags=[],
                     categories=[],
-                    type_=MediaType.PHOTO
+                    media_type=MediaType.PHOTO
                     if instagram_media.media_type == 1
                     else MediaType.VIDEO,
                     data=instagram_media.dict(),
@@ -401,7 +452,7 @@ class InstagrapiUploader(Uploader):
                     description=None,
                     tags=[],
                     categories=[],
-                    type_=MediaType.PHOTO
+                    media_type=MediaType.PHOTO
                     if instagram_media.media_type == 1
                     else MediaType.VIDEO,
                     data=instagram_media.dict(),
