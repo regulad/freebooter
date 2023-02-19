@@ -23,6 +23,7 @@ from typing import Any, Type, Mapping
 
 import jsonschema
 
+from . import Dropper
 from ._assets import ASSETS
 from .middlewares import Middleware, MetadataModifier, MediaCollector
 from .uploaders import (
@@ -55,6 +56,7 @@ MIDDLEWARES: Mapping[str, Type[Middleware]] = FrozenDict(
     {
         "metadata": MetadataModifier,
         "collector": MediaCollector,
+        "dropper": Dropper,
     }
 )
 

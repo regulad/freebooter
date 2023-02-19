@@ -117,12 +117,21 @@ class Watcher(Thread, metaclass=ABCMeta):
 
     def close(self) -> None:
         assert self.ready, "Watcher is not ready!"
+        for middleware in self.preprocessors:
+            middleware.close()
 
     def start(self) -> None:
         assert self.ready, "Watcher is not ready!"
         if self.MYSQL_TYPE is not None:
             self.make_tables()
+        for middleware in self.preprocessors:
+            middleware.start()
         super().start()
+
+    def join(self, timeout: float | None = None) -> None:
+        for middleware in self.preprocessors:
+            middleware.join(timeout=timeout)
+        super().join(timeout)
 
     def mark_handled(self, id_: str, is_handled: bool = True) -> None:
         """

@@ -97,6 +97,7 @@ uploaders:
 |---------------|-------------|------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
 | Edit Metadata | `metadata`  | Edits the metadata of the media file.                                                    | `platform`, `title`, `description`, `tags` and `categories`. Set them to `null` to have them be dropped from the media. |
 | Collector     | `collector` | Collects media files from a source, only releasing them when enough have been collected. | `count` is the amount of media files to collect before releasing them.                                                  |
+| Dropper       | `dropper`   | Randomly drops media files.                                                              | `chance` is the chance of a media file being dropped, a float from 0 to 1.                                              |
 
 #### Watchers
 

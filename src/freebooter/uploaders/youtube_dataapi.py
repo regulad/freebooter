@@ -122,6 +122,7 @@ class YouTubeDataAPIV3Uploader(Uploader):
         )
 
     def close(self) -> None:
+        super().close()
         with self._upload_lock:
             self._http_handler.close()
             del self._credentials  # does not close?

@@ -19,4 +19,5 @@ from __future__ import annotations
 
 from .collector import *
 from .common import *
+from .dropper import *
 from .metadata import *

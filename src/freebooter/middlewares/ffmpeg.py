@@ -32,6 +32,7 @@ from ..metadata import MediaMetadata
 class FFmpegMiddleware(Middleware, metaclass=ABCMeta):
     """
     Uses ffmpeg to convert media to a format that can be uploaded to various social media platforms.
+    This class is currently unused.
     """
 
     def __init__(self, name: str, *, ffmpeg_options: dict, **config) -> None:

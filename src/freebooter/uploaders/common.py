@@ -43,6 +43,11 @@ class Uploader(Thread):
         self._file_manager: FileManager | None = None
         self.preprocessors = preprocessors
 
+    def start(self) -> None:
+        for middleware in self.preprocessors:
+            middleware.start()
+        super().start()
+
     def background_task(self) -> None:
         """
         Override this method to implement a background task.
@@ -98,7 +103,13 @@ class Uploader(Thread):
                 return []
 
     def close(self) -> None:
-        pass
+        for middleware in self.preprocessors:
+            middleware.close()
+
+    def join(self, timeout: float | None = None) -> None:
+        for middleware in self.preprocessors:
+            middleware.join(timeout=timeout)
+        super().join(timeout)
 
 
 __all__ = ("Uploader",)
