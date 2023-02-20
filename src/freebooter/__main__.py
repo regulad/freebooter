@@ -296,26 +296,44 @@ def main() -> None:
 
         # Preparing
         logger.info("Preparing uploaders...")
+        upload_prepare_futures: list[Future[None]] = []
         for uploader in config_uploaders:
-            uploader.prepare(shutdown_event=shutdown_event, file_manager=file_manager)
-        logger.info("Done.")
-
-        logger.info("Preparing middlewares...")
-        for middleware in config_middlewares:
-            middleware.prepare(
+            future = executor.submit(
+                uploader.prepare,
                 shutdown_event=shutdown_event,
                 file_manager=file_manager,
             )
+            upload_prepare_futures.append(future)
+        for future in upload_prepare_futures:
+            future.result()
+        logger.info("Done.")
+
+        logger.info("Preparing middlewares...")
+        middleware_prepare_futures: list[Future[None]] = []
+        for middleware in config_middlewares:
+            future = executor.submit(
+                middleware.prepare,
+                shutdown_event=shutdown_event,
+                file_manager=file_manager,
+            )
+            middleware_prepare_futures.append(future)
+        for future in middleware_prepare_futures:
+            future.result()
         logger.info("Done.")
 
         logger.info("Preparing watchers...")
+        watcher_prepare_futures: list[Future[None]] = []
         for watcher in config_watchers:
-            watcher.prepare(
+            future = executor.submit(
+                watcher.prepare,
                 shutdown_event=shutdown_event,
                 callback=callback,
                 pool=pool,
                 file_manager=file_manager,
             )
+            watcher_prepare_futures.append(future)
+        for future in watcher_prepare_futures:
+            future.result()
         logger.info("Done.")
 
         # Start
