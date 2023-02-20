@@ -84,6 +84,7 @@ class InstaloaderWatcher(Watcher):
         self._iloader_kwargs.setdefault(
             "quiet", True
         )  # doesn't log to a logger, prints to stdout
+        self._iloader_kwargs.setdefault("sleep", True)
         self._iloader_kwargs.setdefault(
             "dirname_pattern", str(self._file_manager.directory)
         )
