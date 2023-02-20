@@ -64,8 +64,8 @@ class InstagrapiUploader(Uploader):
         password: str,
         otp: str | None = None,
         proxy: str | None = None,
-        delay_start: int | None = None,
-        delay_end: int | None = None,
+        delay_start: float | None = 1,
+        delay_end: float | None = 10,
         insta_settings: dict[str, Any] | None = None,
         insta_kwargs: dict[str, Any] | None = None,
         retry_count: int = 5,
@@ -98,7 +98,7 @@ class InstagrapiUploader(Uploader):
         """
         super().__init__(name, preprocessors, **config)
 
-        delay: list[int] | None
+        delay: list[float] | None
         if delay_start is not None and delay_end is not None:
             delay = [delay_start, delay_end]
         else:
