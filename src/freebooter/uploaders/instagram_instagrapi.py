@@ -290,7 +290,7 @@ class InstagrapiUploader(Uploader):
         instagram_medias: list[tuple[ScratchFile, InstagramMedia | Story | None]] = []
 
         match self._mode:
-            case "singleton" | "reels":  # pretty sure this works
+            case "singleton" | "reels":
                 for media, metadata in medias:
                     try:
                         match metadata.type:
