@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from .common import *
+from .instaloader import *
 from .pusher import *
 from .rss import *
 from .upload_local import *

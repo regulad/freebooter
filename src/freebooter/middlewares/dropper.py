@@ -28,6 +28,7 @@ class Dropper(Middleware):
     """
     Drops a random percentage of inputted pieces of media.
     """
+
     def __init__(self, name: str, *, chance: float = 0.2, **config) -> None:
         """
         :param chance: The chance that a piece of media will be dropped. This is a percentage, 0-1.

@@ -55,7 +55,7 @@ class Watcher(Thread, metaclass=ABCMeta):
     """
 
     MYSQL_TYPE: str | None = "VARCHAR(255)"
-    SLEEP_TIME: float = 30.0
+    SLEEP_TIME: float = 60.0
 
     def __init__(
         self,

@@ -21,7 +21,8 @@ from queue import Queue
 from threading import Lock
 
 from .common import *
-from .. import ScratchFile, MediaMetadata
+from ..file_management import ScratchFile
+from ..metadata import MediaMetadata
 
 
 class MediaCollector(Middleware):

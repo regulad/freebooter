@@ -21,7 +21,7 @@ services:
   freebooter:
     image: ghcr.io/nefarium/freebooter:latest
     build: .
-    restart: always
+    restart: unless-stopped
     environment:
       # MariaDB connection
       FREEBOOTER_MYSQL_HOST: mariadb

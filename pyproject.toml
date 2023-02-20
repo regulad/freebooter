@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freebooter"
-version = "1.1.0"
+version = "1.2.0"
 description = "freebooter downloads photos & videos from the internet and uploads it onto your social media accounts."
 authors = ["Parker Wahle <regulad@regulad.xyz>"]
 license = "GPLv3"
@@ -36,6 +36,7 @@ pyotp = "^2.8.0"
 dislog = {extras = ["speed", "sync"], version = "^2.2.1"}
 moviepy = ">=1.0.3"  # unlisted dependency of instagrapi
 pillow-heif = "^0.9.3"
+instaloader = "^4.9.6"  # more mature than instagrapi but only supports reading
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.4.5"

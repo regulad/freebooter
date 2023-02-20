@@ -23,9 +23,8 @@ from typing import Any, Type, Mapping
 
 import jsonschema
 
-from . import Dropper
 from ._assets import ASSETS
-from .middlewares import Middleware, MetadataModifier, MediaCollector
+from .middlewares import Middleware, MetadataModifier, MediaCollector, Dropper
 from .uploaders import (
     Uploader,
     InstagrapiUploader,
@@ -39,6 +38,7 @@ from .watchers import (
     Pusher,
     RSSWatcher,
     LocalMediaLoader,
+    InstaloaderWatcher,
 )
 
 SWAPPED_ORDER_VALIDATE = lambda schema, instance, *args, **kwargs: jsonschema.validate(
@@ -65,6 +65,7 @@ WATCHERS: Mapping[str, Type[Watcher]] = FrozenDict(
         "youtube": YTDLYouTubeChannelWatcher,
         "rss": RSSWatcher.choose_best_watcher,  # type: ignore  # hacky but works fine
         "pusher": Pusher,
+        "instagram": InstaloaderWatcher,
         "local": LocalMediaLoader,
     }
 )
@@ -78,9 +79,13 @@ UPLOADERS: Mapping[str, Type[Uploader]] = FrozenDict(
 )
 
 
-def prepare_middleware(middleware_data: dict[str, Any]) -> Middleware:
+def prepare_middleware(
+    middleware_data: dict[str, Any], *, prepend_name: str = ""
+) -> Middleware:
     middleware_cls: Type[Middleware] = MIDDLEWARES[middleware_data["type"]]
-    return middleware_cls(middleware_data["name"], **middleware_data["config"])
+    return middleware_cls(
+        prepend_name + middleware_data["name"], **middleware_data["config"]
+    )
 
 
 def load_config(config: Any) -> tuple[list[Middleware], list[Watcher], list[Uploader]]:
@@ -98,7 +103,8 @@ def load_config(config: Any) -> tuple[list[Middleware], list[Watcher], list[Uplo
         watcher_cls: Type[Watcher] = WATCHERS[watcher["type"]]
 
         preprocessors = [
-            prepare_middleware(middleware) for middleware in watcher["preprocessors"]
+            prepare_middleware(middleware, prepend_name=watcher["name"] + "-")
+            for middleware in watcher["preprocessors"]
         ]
 
         watchers.append(
@@ -109,7 +115,8 @@ def load_config(config: Any) -> tuple[list[Middleware], list[Watcher], list[Uplo
         uploader_cls: Type[Uploader] = UPLOADERS[uploader["type"]]
 
         preprocessors = [
-            prepare_middleware(middleware) for middleware in uploader["preprocessors"]
+            prepare_middleware(middleware, prepend_name=uploader["name"] + "-")
+            for middleware in uploader["preprocessors"]
         ]
 
         uploaders.append(

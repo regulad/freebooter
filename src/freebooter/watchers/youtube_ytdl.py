@@ -146,22 +146,22 @@ class YTDLYouTubeChannelWatcher(YTDLWatcher):
                 return []
 
             videos: Generator[dict, None, None] = chosen_playlist["entries"]
-            video_list: list[dict] = list(videos)
-
-            video_list.reverse()  # get the oldest videos first
 
             # Now, let's download the videos
             ready_prepared: list[tuple[ScratchFile, MediaMetadata]] = []
-            if not self._backtrack:
-                video = video_list[-1]
-                prepared = self._prepare_video(video["id"], self._copy)
-                if prepared is not None:
-                    ready_prepared.append(prepared)
-            else:
+
+            if self._backtrack:
+                video_list: list[dict] = list(videos)
+                video_list.reverse()  # get the oldest videos first
                 for video in video_list:
                     prepared = self._prepare_video(video["id"], self._copy)
                     if prepared is not None:
                         ready_prepared.append(prepared)
+            else:
+                video = videos.__next__()
+                prepared = self._prepare_video(video["id"], self._copy)
+                if prepared is not None:
+                    ready_prepared.append(prepared)
 
             if self._copy:
                 self._copy = False

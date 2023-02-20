@@ -144,6 +144,11 @@ class FileManager:
         assert not self.closed, "Close was called more than once!"
         for file in self._files.copy():  # changes in size
             file.close()
+        for file in self.directory.iterdir():
+            logger.warning(
+                f"Deleting file {file} because it was not deleted automatically!"
+            )
+            file.unlink()
         self._closed = True
 
     def __del__(self):
@@ -156,6 +161,10 @@ class FileManager:
     @property
     def directory(self) -> Path:
         return self._directory
+
+    @staticmethod
+    def get_file_ident() -> str:
+        return "".join(choice(ascii_letters) for _ in range(15))
 
     def get_file(
         self,
@@ -180,9 +189,7 @@ class FileManager:
                 assert (
                     file_extension.startswith(".") and not file_extension.endswith(".")
                 ) or len(file_extension) == 0, "File extension must start with a period"
-                file_name = (
-                    "".join(choice(ascii_letters) for _ in range(15)) + file_extension
-                )
+                file_name = self.get_file_ident() + file_extension
 
             file_name = (
                 Path(file_name) if not isinstance(file_name, Path) else file_name

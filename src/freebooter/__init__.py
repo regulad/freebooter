@@ -22,4 +22,4 @@ from .middlewares import *
 from .uploaders import *
 from .watchers import *
 
-version = "0.1.0"
+version = "1.2.0"

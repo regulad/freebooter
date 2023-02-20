@@ -35,14 +35,12 @@ from logging import (
 from os import environ
 from os.path import splitext
 from pathlib import Path
-from threading import Event
-from typing import Any, cast
+from typing import cast
 
 import yaml
 from dislog import DiscordWebhookHandler
 from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
-from mariadb import ConnectionPool
 from oauthlib.oauth2 import OAuth2Token
 from pillow_heif import register_heif_opener
 
@@ -297,14 +295,20 @@ def main() -> None:
         logger.info("Done.")
 
         # Preparing
-        logger.info("Preparing watchers & uploaders...")
+        logger.info("Preparing uploaders...")
+        for uploader in config_uploaders:
+            uploader.prepare(shutdown_event=shutdown_event, file_manager=file_manager)
+        logger.info("Done.")
 
+        logger.info("Preparing middlewares...")
         for middleware in config_middlewares:
             middleware.prepare(
                 shutdown_event=shutdown_event,
                 file_manager=file_manager,
             )
+        logger.info("Done.")
 
+        logger.info("Preparing watchers...")
         for watcher in config_watchers:
             watcher.prepare(
                 shutdown_event=shutdown_event,
@@ -312,13 +316,14 @@ def main() -> None:
                 pool=pool,
                 file_manager=file_manager,
             )
-
-        for uploader in config_uploaders:
-            uploader.prepare(shutdown_event=shutdown_event, file_manager=file_manager)
-
         logger.info("Done.")
 
         # Start
+        logger.info("Starting uploaders...")
+        for uploader in config_uploaders:
+            uploader.start()
+        logger.info("Done.")
+
         logger.info("Starting middlewares...")
         for middleware in config_middlewares:
             middleware.start()
@@ -327,11 +332,6 @@ def main() -> None:
         logger.info("Starting watchers...")
         for watcher in config_watchers:
             watcher.start()
-        logger.info("Done.")
-
-        logger.info("Starting uploaders...")
-        for uploader in config_uploaders:
-            uploader.start()
         logger.info("Done.")
 
         try:
@@ -346,16 +346,16 @@ def main() -> None:
                 watcher.close()
             logger.info("Done.")
 
-            logger.info("Waiting for uploaders to finish...")
-            for uploader in config_uploaders:
-                uploader.join()
-                uploader.close()
-            logger.info("Done.")
-
             logger.info("Waiting for middlewares to finish...")
             for middleware in config_middlewares:
                 middleware.join()
                 middleware.close()
+            logger.info("Done.")
+
+            logger.info("Waiting for uploaders to finish...")
+            for uploader in config_uploaders:
+                uploader.join()
+                uploader.close()
             logger.info("Done.")
 
             logger.info("Closing MariaDB connection pool...")
