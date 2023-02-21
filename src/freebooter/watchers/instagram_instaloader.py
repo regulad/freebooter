@@ -246,6 +246,10 @@ class InstaloaderWatcher(Watcher):
                 data=post._node if hasattr(post, "_node") else None,  # noqa
             )
 
+            # Files from albums may noy show up so we need to check for them.
+            # TODO: 12345677_1.jpg is the second image in an album, 12345677_2.jpg is the third, etc.
+            # Only 12345677.jpg is the first image and is the only one that we handle.
+
             yield file, metadata
 
             self.mark_handled(post.shortcode)

@@ -78,11 +78,11 @@ class MetadataModifier(Middleware):
 
         if not any(
             [
-                self._platform,
-                self._title,
-                self._description,
-                self._tags,
-                self._categories,
+                self._platform is not Missing,
+                self._title is not Missing,
+                self._description is not Missing,
+                self._tags is not Missing,
+                self._categories is not Missing,
             ]
         ):
             raise ValueError("No metadata to modify!")
