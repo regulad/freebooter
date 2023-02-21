@@ -48,6 +48,7 @@ class MediaCollector(Middleware):
         """
         Closes the middleware.
         """
+        super().close()
         while not self._media.empty():
             got_media = self._media.get()
             self.logger.debug(f"Releasing media {got_media[1].id} ON CLOSE.")

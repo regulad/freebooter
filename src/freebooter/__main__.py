@@ -21,7 +21,8 @@ import json
 import sys
 import webbrowser
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, Executor
+from functools import partial
 from io import FileIO
 from logging import (
     basicConfig,
@@ -305,95 +306,108 @@ def main() -> None:
     config_middlewares, config_watchers, config_uploaders = load_config(config_data)
 
     # get stuff ready for watchers
-    with ThreadPoolExecutor() as executor:  # easier to handle as context manager
-        shutdown_event = Event()
+    shutdown_event = Event()
 
-        def upload_handler(
-            medias: list[tuple[ScratchFile, MediaMetadata]]
-        ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
-            for middleware in config_middlewares:
-                medias = middleware.process_many(medias)
+    def upload_handler(
+        medias: list[tuple[ScratchFile, MediaMetadata]]
+    ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
+        logger.debug(f"Running middlewares on {len(medias)} files...")
 
-            out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
+        for middleware in config_middlewares:
+            medias = middleware.process_many(medias)
 
+        logger.debug(
+            f"Middlewares were processed. Running uploaders on {len(medias)} files..."
+        )
+
+        out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
+
+        with ThreadPoolExecutor(max_workers=len(config_uploaders)) as upload_executor:
             uploader_futures: list[
                 Future[list[tuple[ScratchFile, MediaMetadata | None]]]
             ] = []
-
             for uploader in config_uploaders:
                 uploader_futures.append(
-                    executor.submit(uploader.upload_and_preprocess, medias)
+                    upload_executor.submit(uploader.upload_and_preprocess, medias)
                 )
-
             for future in uploader_futures:
                 out_medias.extend(future.result())
 
-            return out_medias
+        logger.debug(f"Uploaders were processed. Returning {len(out_medias)} files...")
 
-        def callback(
-            medias: list[tuple[ScratchFile, MediaMetadata]]
-        ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
-            return executor.submit(upload_handler, medias)
+        return out_medias
 
-        logger.info("Done.")
+    def callback(
+        medias: list[tuple[ScratchFile, MediaMetadata]],
+        *,
+        executor: Executor,
+    ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
+        return executor.submit(upload_handler, medias)
 
+    logger.info("Done.")
+
+    with ThreadPoolExecutor(thread_name_prefix="Uploader") as executor:
         # Preparing
-        logger.info("Preparing uploaders...")
-        upload_prepare_futures: list[Future[None]] = []
-        for uploader in config_uploaders:
-            future = executor.submit(
-                uploader.prepare,
-                shutdown_event=shutdown_event,
-                file_manager=file_manager,
-            )
-            upload_prepare_futures.append(future)
-        for future in upload_prepare_futures:
-            future.result()
-        logger.info("Done.")
+        prepare_kwargs = {
+            # Defaults
+            "shutdown_event": shutdown_event,
+            "file_manager": file_manager,
+            "callback": partial(callback, executor=executor),
+            "pool": pool,
+            # For special use cases
+            "uploaders": config_uploaders,
+            "middlewares": config_middlewares,
+            "watchers": config_watchers,
+        }
 
-        logger.info("Preparing middlewares...")
-        middleware_prepare_futures: list[Future[None]] = []
-        for middleware in config_middlewares:
-            future = executor.submit(
-                middleware.prepare,
-                shutdown_event=shutdown_event,
-                file_manager=file_manager,
-            )
-            middleware_prepare_futures.append(future)
-        for future in middleware_prepare_futures:
-            future.result()
-        logger.info("Done.")
+        with ThreadPoolExecutor(
+            thread_name_prefix="Setup",
+            max_workers=max(
+                len(config_middlewares), len(config_watchers), len(config_uploaders)
+            ),
+        ) as setup_executor:
+            logger.info("Preparing uploaders...")
+            upload_prepare_futures: list[Future[None]] = []
+            for uploader in config_uploaders:
+                future = setup_executor.submit(uploader.prepare, **prepare_kwargs)
+                upload_prepare_futures.append(future)
+            for future in upload_prepare_futures:
+                future.result()
+            logger.info("Done.")
 
-        logger.info("Preparing watchers...")
-        watcher_prepare_futures: list[Future[None]] = []
-        for watcher in config_watchers:
-            future = executor.submit(
-                watcher.prepare,
-                shutdown_event=shutdown_event,
-                callback=callback,
-                pool=pool,
-                file_manager=file_manager,
-            )
-            watcher_prepare_futures.append(future)
-        for future in watcher_prepare_futures:
-            future.result()
-        logger.info("Done.")
+            logger.info("Preparing middlewares...")
+            middleware_prepare_futures: list[Future[None]] = []
+            for middleware in config_middlewares:
+                future = setup_executor.submit(middleware.prepare, **prepare_kwargs)
+                middleware_prepare_futures.append(future)
+            for future in middleware_prepare_futures:
+                future.result()
+            logger.info("Done.")
 
-        # Start
-        logger.info("Starting uploaders...")
-        for uploader in config_uploaders:
-            uploader.start()
-        logger.info("Done.")
+            logger.info("Preparing watchers...")
+            watcher_prepare_futures: list[Future[None]] = []
+            for watcher in config_watchers:
+                future = setup_executor.submit(watcher.prepare, **prepare_kwargs)
+                watcher_prepare_futures.append(future)
+            for future in watcher_prepare_futures:
+                future.result()
+            logger.info("Done.")
 
-        logger.info("Starting middlewares...")
-        for middleware in config_middlewares:
-            middleware.start()
-        logger.info("Done.")
+            # Start
+            # logger.info("Starting uploaders...")
+            # for uploader in config_uploaders:
+            #     uploader.start()
+            # logger.info("Done.")
 
-        logger.info("Starting watchers...")
-        for watcher in config_watchers:
-            watcher.start()
-        logger.info("Done.")
+            # logger.info("Starting middlewares...")
+            # for middleware in config_middlewares:
+            #     middleware.start()
+            # logger.info("Done.")
+
+            logger.info("Starting watchers...")
+            for watcher in config_watchers:
+                watcher.start()
+            logger.info("Done.")
 
         try:
             shutdown_event.wait()
@@ -401,38 +415,46 @@ def main() -> None:
             logger.info("Keyboard interrupt received, shutting down...")
             shutdown_event.set()
 
-            logger.info("Shutting down executor...")
-            executor.shutdown(wait=True, cancel_futures=True)
-            logger.info("Done.")
+        logger.info("Waiting for watchers to finish...")
+        for watcher in config_watchers:
+            watcher.join()
+            watcher.close()
+        logger.info("Done.")
 
-            logger.info("Waiting for watchers to finish...")
-            for watcher in config_watchers:
-                watcher.join()
-                watcher.close()
-            logger.info("Done.")
+    # We are out of the executor now. We can't use it anymore. Only watchers should have used it, so we are ok.
 
-            logger.info("Waiting for middlewares to finish...")
-            for middleware in config_middlewares:
-                middleware.join()
-                middleware.close()
-            logger.info("Done.")
+    # logger.info("Waiting for middlewares to finish...")
+    # for middleware in config_middlewares:
+    #     middleware.join()
+    #     middleware.close()
+    # logger.info("Done.")
 
-            logger.info("Waiting for uploaders to finish...")
-            for uploader in config_uploaders:
-                uploader.join()
-                uploader.close()
-            logger.info("Done.")
+    # logger.info("Waiting for uploaders to finish...")
+    # for uploader in config_uploaders:
+    #     uploader.join()
+    #     uploader.close()
+    # logger.info("Done.")
 
-            logger.info("Closing MariaDB connection pool...")
-            pool.close()
-            logger.info("Done.")
+    # Even though middlewares & uploaders aren't threads anymore, we still need to do some shutdown.
+    logger.info("Closing middlewares...")
+    for middleware in config_middlewares:
+        middleware.close()
+    logger.info("Done.")
 
-            logger.info("Closing file manager...")
-            file_manager.close()
-            logger.info("Done.")
+    logger.info("Closing uploaders...")
+    for uploader in config_uploaders:
+        uploader.close()
+    logger.info("Done.")
 
-            logger.info("Done. Exiting.")
-            return
+    logger.info("Closing MariaDB connection pool...")
+    pool.close()
+    logger.info("Done.")
+
+    logger.info("Closing file manager...")
+    file_manager.close()
+    logger.info("Done.")
+
+    logger.info("Done. Exiting.")
 
 
 if __name__ == "__main__":

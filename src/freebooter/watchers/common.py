@@ -105,36 +105,32 @@ class Watcher(Thread, metaclass=ABCMeta):
         callback: UploadCallback,
         pool: ConnectionPool,
         file_manager: FileManager,
+        **kwargs,
     ) -> None:
         assert not self.ready, "Watcher is already ready!"
 
+        self.logger.debug(f"Preparing {self.name}...")
+
         for middleware in self.preprocessors:
-            middleware.prepare(shutdown_event, file_manager)
+            middleware.prepare(shutdown_event, file_manager, **kwargs)
 
         self._shutdown_event = shutdown_event
         self._callback = callback
         self._mariadb_pool = pool
         self._file_manager = file_manager
 
+        if self.MYSQL_TYPE is not None:
+            self.make_tables()
+
         assert self.ready, "An error occurred while readying uploader!"
 
     def close(self) -> None:
         assert self.ready, "Watcher is not ready!"
+
+        self.logger.debug(f"Closing {self.name}...")
+
         for middleware in self.preprocessors:
             middleware.close()
-
-    def start(self) -> None:
-        assert self.ready, "Watcher is not ready!"
-        if self.MYSQL_TYPE is not None:
-            self.make_tables()
-        for middleware in self.preprocessors:
-            middleware.start()
-        super().start()
-
-    def join(self, timeout: float | None = None) -> None:
-        for middleware in self.preprocessors:
-            middleware.join(timeout=timeout)
-        super().join(timeout)
 
     def mark_handled(self, id_: str, is_handled: bool = True) -> None:
         """
@@ -196,6 +192,50 @@ class Watcher(Thread, metaclass=ABCMeta):
             connection.commit()
             self.logger.debug(f"Created table {self._table_name}")
 
+    def _preprocess_and_execute(
+        self, downloaded: list[tuple[ScratchFile, MediaMetadata]]
+    ) -> None:
+        assert self._callback, "No callback set!"
+
+        self.logger.info(f"{self.name} is processing {len(downloaded)} output(s)")
+
+        for preprocessor in self.preprocessors:
+            downloaded = preprocessor.process_many(downloaded)
+
+        # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
+        # code is concurrent
+        def cleanup(
+            done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]
+        ) -> None:
+            try:
+                result = done_future.result(timeout=0)
+            except TimeoutError:
+                result = None
+
+            if result is None:
+                self.logger.error(
+                    f"{self.name} upload callback failed! Closing files and exiting..."
+                )
+                if downloaded is not None:
+                    for scratch_file, _ in downloaded:
+                        if not scratch_file.closed:
+                            scratch_file.close()
+            else:
+                self.logger.info(
+                    f"{self.name} upload callback finished, closing files..."
+                )
+                for scratch_file, _ in result:
+                    if not scratch_file.closed:
+                        scratch_file.close()
+
+        fut = self._callback(downloaded)
+
+        fut.add_done_callback(cleanup)
+
+        self.logger.info(
+            f"{self.name} started execution with {len(downloaded)} output(s)"
+        )
+
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"
         assert (
@@ -214,39 +254,8 @@ class Watcher(Thread, metaclass=ABCMeta):
                 self.logger.exception(f"Error checking for new uploads: {e}")
                 downloaded = []
 
-            for preprocessor in self.preprocessors:
-                downloaded = preprocessor.process_many(downloaded)
+            self._preprocess_and_execute(downloaded)
 
-            # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
-            # code is concurrent
-            def cleanup(
-                done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]
-            ) -> None:
-                try:
-                    result = done_future.result(timeout=0)
-                except TimeoutError:
-                    result = None
-
-                if result is None:
-                    self.logger.error(
-                        "Upload callback timed out, closing files and exiting"
-                    )
-                    if downloaded is not None:
-                        for scratch_file, _ in downloaded:
-                            if not scratch_file.closed:
-                                scratch_file.close()
-                else:
-                    self.logger.debug("Upload callback finished, closing files")
-                    for scratch_file, _ in result:
-                        if not scratch_file.closed:
-                            scratch_file.close()
-
-            uploaded_future = self._callback(downloaded)
-            uploaded_future.add_done_callback(cleanup)
-
-            self.logger.info(
-                f"{self.name} completed a check cycle with {len(downloaded)} output(s), sleeping.."
-            )
             self._shutdown_event.wait(self.SLEEP_TIME)
 
 
@@ -298,6 +307,7 @@ class YTDLWatcher(Watcher, metaclass=ABCMeta):
         return scratch_file, metadata
 
     def close(self) -> None:
+        super().close()
         del self._downloader  # ytdl does some closing but not openly
         self._downloader = None
 
@@ -307,8 +317,9 @@ class YTDLWatcher(Watcher, metaclass=ABCMeta):
         callback: UploadCallback,
         pool: ConnectionPool,
         file_manager: FileManager,
+        **kwargs,
     ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager)
+        super().prepare(shutdown_event, callback, pool, file_manager, **kwargs)
 
         assert self._downloader is None, "Downloader already initialized"
         assert self._file_manager is not None, "File manager not initialized"

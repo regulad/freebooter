@@ -115,8 +115,9 @@ class InstaloaderWatcher(Watcher):
         callback: UploadCallback,
         pool: ConnectionPool,
         file_manager: FileManager,
+        **kwargs,
     ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager)
+        super().prepare(shutdown_event, callback, pool, file_manager, **kwargs)
 
         assert self._file_manager is not None, "File manager was not set!"
 

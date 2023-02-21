@@ -55,10 +55,10 @@ class ScratchFile:
 
         self._file: FileIO | None = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ScratchFile({self._path})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._path)
 
     @property

@@ -17,15 +17,16 @@
 """
 from __future__ import annotations
 
+from abc import ABCMeta
 from logging import getLogger, Logger
-from threading import Lock, Thread, Event
+from threading import Event
 
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware
 
 
-class Uploader(Thread):
+class Uploader(metaclass=ABCMeta):
     """
     Base class for all uploaders. Uploaders are responsible for uploading media to social media platforms.
     They are a thread to allow the execution of background tasks.
@@ -34,33 +35,11 @@ class Uploader(Thread):
     BACKGROUND_TASK_INTERVAL_SECONDS: float = 1.0
 
     def __init__(self, name: str, preprocessors: list[Middleware], **config) -> None:
-        super().__init__(
-            name=f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
-        )
+        self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 
-        self._upload_lock = Lock()
         self._shutdown_event: Event | None = None
         self._file_manager: FileManager | None = None
         self.preprocessors = preprocessors
-
-    def start(self) -> None:
-        for middleware in self.preprocessors:
-            middleware.start()
-        super().start()
-
-    def background_task(self) -> None:
-        """
-        Override this method to implement a background task.
-        """
-        pass
-
-    def run(self) -> None:
-        assert self.ready, "Uploader is not ready!"
-        assert self._shutdown_event is not None, "Uploader is not ready!"
-
-        while not self._shutdown_event.is_set():
-            self.background_task()
-            self._shutdown_event.wait(self.BACKGROUND_TASK_INTERVAL_SECONDS)
 
     @property
     def logger(self) -> Logger:
@@ -74,8 +53,12 @@ class Uploader(Thread):
             and all(middleware.ready for middleware in self.preprocessors)
         )
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager) -> None:
+    def prepare(
+        self, shutdown_event: Event, file_manager: FileManager, **kwargs
+    ) -> None:
         assert not self.ready, "Uploader is already ready!"
+
+        self.logger.debug(f"Preparing uploader {self.name}...")
 
         self._shutdown_event = shutdown_event
         self._file_manager = file_manager
@@ -95,21 +78,17 @@ class Uploader(Thread):
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         for middleware in self.preprocessors:
             medias = middleware.process_many(medias)
-        with self._upload_lock:
-            try:
-                return self.upload(medias)
-            except Exception as e:
-                self.logger.exception(e)
-                return []
+        try:
+            return self.upload(medias)
+        except Exception as e:
+            self.logger.exception(f"Failed to upload media: {e}")
+            return []
 
     def close(self) -> None:
+        self.logger.debug(f"Closing {self.name}...")
+
         for middleware in self.preprocessors:
             middleware.close()
-
-    def join(self, timeout: float | None = None) -> None:
-        for middleware in self.preprocessors:
-            middleware.join(timeout=timeout)
-        super().join(timeout)
 
 
 __all__ = ("Uploader",)

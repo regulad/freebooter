@@ -19,13 +19,13 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from logging import Logger, getLogger
-from threading import Thread, Event
+from threading import Event
 
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata
 
 
-class Middleware(Thread, metaclass=ABCMeta):
+class Middleware(metaclass=ABCMeta):
     """
     A middleware is a class that can be used to modify the media that is downloaded by freebooter.
     The process method may be called concurrently, so it must be thread-safe.
@@ -34,28 +34,12 @@ class Middleware(Thread, metaclass=ABCMeta):
     BACKGROUND_TASK_INTERVAL_SECONDS = 60
 
     def __init__(self, name: str, **config) -> None:
-        super().__init__(
-            name=f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
-        )
+        self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 
         self.config = config
 
         self._file_manager: FileManager | None = None
         self._shutdown_event: Event | None = None
-
-    def background_task(self) -> None:
-        """
-        Override this method to implement a background task, like keeping a connection alive.
-        """
-        pass
-
-    def run(self) -> None:
-        assert self.ready, "Middleware is not ready!"
-        assert self._shutdown_event is not None, "Middleware is not ready!"
-
-        while not self._shutdown_event.is_set():
-            self.background_task()
-            self._shutdown_event.wait(self.BACKGROUND_TASK_INTERVAL_SECONDS)
 
     @property
     def logger(self) -> Logger:
@@ -69,10 +53,14 @@ class Middleware(Thread, metaclass=ABCMeta):
         """
         Override this method to implement a close method. Will be called when the middleware is shutting down.
         """
-        pass
+        self.logger.debug(f"Closing middleware {self.name}.")
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager):
+    def prepare(
+        self, shutdown_event: Event, file_manager: FileManager, **kwargs
+    ) -> None:
         assert not self.ready, "Middleware is already ready."
+
+        self.logger.debug(f"Preparing middleware {self.name}...")
 
         self._shutdown_event = shutdown_event
         self._file_manager = file_manager

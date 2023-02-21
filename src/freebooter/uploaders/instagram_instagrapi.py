@@ -270,8 +270,10 @@ class InstagrapiUploader(Uploader):
         # Watcher Configuration
         self._mode = mode
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager) -> None:
-        super().prepare(shutdown_event, file_manager)
+    def prepare(
+        self, shutdown_event: Event, file_manager: FileManager, **kwargs
+    ) -> None:
+        super().prepare(shutdown_event, file_manager, **kwargs)
 
         self.logger.info(
             "Logging in to Instagram for the first time, this may take a while..."

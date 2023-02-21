@@ -123,9 +123,8 @@ class YouTubeDataAPIV3Uploader(Uploader):
 
     def close(self) -> None:
         super().close()
-        with self._upload_lock:
-            self._http_handler.close()
-            del self._credentials  # does not close?
+        self._http_handler.close()
+        del self._credentials  # does not close?
 
     def _get_category_id_by_name(self, category_name: str) -> int:
         """
