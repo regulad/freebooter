@@ -257,20 +257,7 @@ def main() -> None:
     db_user = environ.get("FREEBOOTER_MYSQL_USER", "freebooter")
     db_password = environ.get("FREEBOOTER_MYSQL_PASSWORD", "password")
 
-    logger.info("Initializing MariaDB connection pool...")
-
-    pool = ConnectionPool(
-        host=db_host,
-        port=db_port,
-        database=db_database,
-        user=db_user,
-        password=db_password,
-        pool_name="freebooter",
-    )
-
-    logger.info("MariaDB connection OK.")
-
-    logger.info("Done.")
+    logger.info("MariaDB configuration OK.")
 
     # Load configuration
 
@@ -304,6 +291,22 @@ def main() -> None:
     logger.info("Loading config...")
 
     config_middlewares, config_watchers, config_uploaders = load_config(config_data)
+
+    # Now we send it!
+    # MariaDB startup
+
+    logger.info("Initializing MariaDB connection pool...")
+
+    pool = ConnectionPool(
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_password,
+        pool_name="freebooter",
+        pool_size=min(len(config_watchers), 64),
+    )
+
+    logger.info("Done.")
 
     # get stuff ready for watchers
     shutdown_event = Event()
@@ -360,12 +363,7 @@ def main() -> None:
             "watchers": config_watchers,
         }
 
-        with ThreadPoolExecutor(
-            thread_name_prefix="Setup",
-            max_workers=max(
-                len(config_middlewares), len(config_watchers), len(config_uploaders)
-            ),
-        ) as setup_executor:
+        with ThreadPoolExecutor(thread_name_prefix="Setup") as setup_executor:
             logger.info("Preparing uploaders...")
             upload_prepare_futures: list[Future[None]] = []
             for uploader in config_uploaders:
