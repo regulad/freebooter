@@ -35,12 +35,14 @@ from logging import (
 from os import environ
 from os.path import splitext
 from pathlib import Path
-from typing import cast
+from threading import Event
+from typing import cast, Any
 
 import yaml
 from dislog import DiscordWebhookHandler
 from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
+from mariadb import ConnectionPool
 from oauthlib.oauth2 import OAuth2Token
 from pillow_heif import register_heif_opener
 from tweepy import OAuth1UserHandler

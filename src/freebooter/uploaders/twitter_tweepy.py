@@ -77,7 +77,7 @@ class TweepyTwitterUploader(Uploader):
         tweepy_kwargs_nonnone = tweepy_kwargs or {}
 
         tweepy_kwargs_nonnone.setdefault("proxy", proxy)
-        tweepy_kwargs_nonnone.setdefault("retry_count", 5)
+        tweepy_kwargs_nonnone.setdefault("retry_count", 3)
         tweepy_kwargs_nonnone.setdefault("retry_delay", 3)
         tweepy_kwargs_nonnone.setdefault("wait_on_rate_limit", True)
 

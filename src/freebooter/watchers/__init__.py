@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from .common import *
-from .instaloader import *
+from .instagram_instaloader import *
 from .local import *
 from .pusher import *
 from .rss import *

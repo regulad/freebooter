@@ -67,7 +67,9 @@ class MediaCollector(Middleware):
         with self._lock:
             for media_pair in media:
                 self.logger.debug(f"Collecting media {media_pair[1].id}.")
-                self._media.put(self._process(*media_pair))
+                processed = self._process(*media_pair)
+                if processed is not None:
+                    self._media.put(processed)
 
             returned_medias: list[tuple[ScratchFile, MediaMetadata]] = []
 
