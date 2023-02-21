@@ -22,7 +22,13 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 from typing import Any, Generator
 
-from instaloader import Instaloader, Profile, Post, NodeIterator, ProfileNotExistsException
+from instaloader import (
+    Instaloader,
+    Profile,
+    Post,
+    NodeIterator,
+    ProfileNotExistsException,
+)
 from mariadb import ConnectionPool
 from requests import Session
 
@@ -32,15 +38,17 @@ from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 from ..util import FrozenDict
 
-DEFAULT_INSTALOADER_KWARGS = FrozenDict({
-    "save_metadata": False,
-    "download_video_thumbnails": False,
-    "quiet": True,  # logs by default to stdout, so we don't want to do that
-    "sleep": True,
-    "filename_pattern": "{target}",
-    "post_metadata_txt_pattern": "",  # Don't save
-    "storyitem_metadata_txt_pattern": "",  # Don't save
-})
+DEFAULT_INSTALOADER_KWARGS = FrozenDict(
+    {
+        "save_metadata": False,
+        "download_video_thumbnails": False,
+        "quiet": True,  # logs by default to stdout, so we don't want to do that
+        "sleep": True,
+        "filename_pattern": "{target}",
+        "post_metadata_txt_pattern": "",  # Don't save
+        "storyitem_metadata_txt_pattern": "",  # Don't save
+    }
+)
 DEFAULT_INSTALOADER = Instaloader(**DEFAULT_INSTALOADER_KWARGS)
 # All of these will be initialized concurrently, and we don't want them to clobber each other
 DEFAULT_INSTALOADER_SETUP_LOCK = Lock()
@@ -135,7 +143,9 @@ class InstaloaderWatcher(Watcher):
                     # We are assured by the Event and the Lock that this can only possibly run once, and by the nature
                     # of the setup that things like the shutdown_event, upload callback, file manager, etc. will be the
                     # same for all instances of this class.
-                    DEFAULT_INSTALOADER.dirname_pattern = str(self._file_manager.directory)
+                    DEFAULT_INSTALOADER.dirname_pattern = str(
+                        self._file_manager.directory
+                    )
 
                     # Login behavior is different for the default instaloader, so we have to do this here.
                     username = environ.get("FREEBOOTER_INSTALOADER_USERNAME")
@@ -153,7 +163,9 @@ class InstaloaderWatcher(Watcher):
 
                             session_filename = str(session_file_path)
 
-                        DEFAULT_INSTALOADER.load_session_from_file(username, session_filename)
+                        DEFAULT_INSTALOADER.load_session_from_file(
+                            username, session_filename
+                        )
 
                     # This is hacky as all shit! But, there is no other way to guarantee that the default instaloader
                     # will shut down properly. This is because the default instaloader is a singleton, and we can't
@@ -173,7 +185,9 @@ class InstaloaderWatcher(Watcher):
 
                     DEFAULT_INSTALOADER_INITIALIZED.set()
 
-                self._iloader_kwargs.setdefault("dirname_pattern", self._iloader.dirname_pattern)
+                self._iloader_kwargs.setdefault(
+                    "dirname_pattern", self._iloader.dirname_pattern
+                )
         else:
             if self._iloader_kwargs is None:
                 self._iloader_kwargs = {}
@@ -187,7 +201,9 @@ class InstaloaderWatcher(Watcher):
                 self._session.proxies.update(self._proxies)
         if self._username is not None:
             try:
-                self._profile = Profile.from_username(self._iloader.context, self._username)
+                self._profile = Profile.from_username(
+                    self._iloader.context, self._username
+                )
             except ProfileNotExistsException:
                 if self._userid:
                     self.logger.warning(
