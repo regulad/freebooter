@@ -22,7 +22,7 @@ from logging import getLogger
 from traceback import format_exc
 from typing import Generator
 
-from .ytdl_common import YTDLWatcher
+from .common import YTDLWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware

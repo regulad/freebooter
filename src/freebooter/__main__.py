@@ -43,6 +43,7 @@ from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
 from oauthlib.oauth2 import OAuth2Token
 from pillow_heif import register_heif_opener
+from tweepy import OAuth1UserHandler
 
 from . import *
 from ._assets import *
@@ -148,6 +149,46 @@ def authorize_youtube_data_api() -> None:
 
     print(f"Saved OAuth2 token to {oauth2_token_path}.")
     return
+
+
+def authorize_twitter_api() -> None:
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--consumer-key",
+        "-C",
+        type=str,
+        required=False,
+        help="The consumer key for the Twitter API. If false, the Mac key will be used.",
+    )
+    parser.add_argument(
+        "--consumer-secret",
+        "-S",
+        type=str,
+        required=False,
+        help="The consumer secret for the Twitter API. If false, the Mac key will be used.",
+    )
+
+    args = parser.parse_args()
+
+    # run it!
+
+    consumer_key = args.consumer_key or MAC_OAUTH_CONSUMER_KEY
+    consumer_secret = args.consumer_secret or MAC_OAUTH_CONSUMER_SECRET
+
+    oauth = OAuth1UserHandler(
+        consumer_key=consumer_key, consumer_secret=consumer_secret, callback="oob"
+    )
+
+    url = oauth.get_authorization_url(signin_with_twitter=True)
+
+    webbrowser.open(url)
+
+    verifier = input(f"Enter the code you got from {url}: ")
+
+    access_token, access_secret = oauth.get_access_token(verifier)
+
+    print(f"Access token: {access_token}")
+    print(f"Access secret: {access_secret}")
 
 
 def main() -> None:
@@ -358,6 +399,10 @@ def main() -> None:
             logger.info("Keyboard interrupt received, shutting down...")
             shutdown_event.set()
 
+            logger.info("Shutting down executor...")
+            executor.shutdown(wait=True, cancel_futures=True)
+            logger.info("Done.")
+
             logger.info("Waiting for watchers to finish...")
             for watcher in config_watchers:
                 watcher.join()
@@ -391,4 +436,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-__all__ = ("main", "authorize_youtube_data_api")
+__all__ = ("main", "authorize_youtube_data_api", "authorize_twitter_api")

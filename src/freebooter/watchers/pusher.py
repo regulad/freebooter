@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-from .common import *
+from .common import Watcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware

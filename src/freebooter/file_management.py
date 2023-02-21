@@ -26,7 +26,7 @@ from string import ascii_letters
 from threading import Lock
 from typing import Literal, TYPE_CHECKING
 
-from .util.weaklist import WeakList
+from .util import WeakList
 
 logger: Logger = getLogger(__name__)
 

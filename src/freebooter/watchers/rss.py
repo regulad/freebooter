@@ -27,7 +27,7 @@ from feedparser import FeedParserDict
 from requests import Session, Response
 from requests.adapters import HTTPAdapter
 
-from .youtube_ytdl import YTDLWatcher
+from .common import YTDLWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, Platform, MediaType
 from ..middlewares import Middleware

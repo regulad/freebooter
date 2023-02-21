@@ -21,17 +21,21 @@ import mimetypes
 from enum import Enum, auto
 from logging import getLogger
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+import tweepy.models
 
 logger = getLogger(__name__)
 
 
 class Platform(Enum):
     OTHER = auto()
+
     YOUTUBE = auto()
     TIKTOK = auto()
     INSTAGRAM = auto()
     REDDIT = auto()
+    TWITTER = auto()
 
     @classmethod
     def from_url(cls, url: str) -> Platform:
@@ -49,8 +53,21 @@ class Platform(Enum):
 
 class MediaType(Enum):
     UNKNOWN = auto()
+
+    OTHER = auto()
+
     PHOTO = auto()
     VIDEO = auto()
+
+    @classmethod
+    def from_twitter_type(
+        cls, twitter_type: Literal["photo", "animated_gif", "video"]
+    ) -> MediaType:
+        match twitter_type:
+            case "photo" | "animated_gif":
+                return cls.PHOTO
+            case "video":
+                return cls.VIDEO
 
     @classmethod
     def from_mime_type(cls, mime_type: str | None) -> MediaType:
@@ -138,6 +155,34 @@ class MediaMetadata:
         self._categories = categories
         self._type = media_type
         self._data = data or {}
+
+    @classmethod
+    def from_tweepy_status_model(cls, status: tweepy.models.Status) -> MediaMetadata:
+        return cls(
+            media_id=status.id_str,
+            platform=Platform.TWITTER,
+            title=status.text,
+            description=None,
+            tags=[],
+            categories=[],
+            media_type=MediaType.OTHER,  # tweets don't fit evenly into a category
+            data=status.__getstate__(),
+        )
+
+    @classmethod
+    def from_tweepy_media_model(cls, media: tweepy.models.Media) -> MediaMetadata:
+        mime_type = media.image["image_type"]
+
+        return cls(
+            media_id=media.media_id_string,
+            platform=Platform.TWITTER,
+            title=None,
+            description=None,
+            tags=[],
+            categories=[],
+            media_type=MediaType.from_mime_type(mime_type),
+            data=media.__getstate__(),
+        )
 
     @classmethod
     def from_ytdl_info(cls, info: dict[str, Any]) -> MediaMetadata:

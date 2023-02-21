@@ -30,6 +30,7 @@ from .uploaders import (
     InstagrapiUploader,
     YouTubeDataAPIV3Uploader,
     LocalMediaStorage,
+    TweepyTwitterUploader,
 )
 from .util import FrozenDict
 from .watchers import (
@@ -75,6 +76,7 @@ UPLOADERS: Mapping[str, Type[Uploader]] = FrozenDict(
         "instagram": InstagrapiUploader,
         "youtube": YouTubeDataAPIV3Uploader,
         "local": LocalMediaStorage,
+        "twitter": TweepyTwitterUploader,
     }
 )
 

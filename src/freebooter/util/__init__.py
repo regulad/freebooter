@@ -19,3 +19,4 @@ from __future__ import annotations
 
 from .frozen_dict import *
 from .loader import *
+from .weaklist import *
