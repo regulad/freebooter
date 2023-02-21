@@ -21,7 +21,7 @@ import datetime
 import re
 import time
 import typing
-from threading import Lock
+from threading import Lock, Event
 from typing import Any, Literal
 
 from PIL import Image
@@ -44,7 +44,7 @@ from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
 from .common import Uploader
-from ..file_management import ScratchFile
+from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 
@@ -264,23 +264,22 @@ class InstagrapiUploader(Uploader):
         # Login
         if username is None or password is None:
             raise RuntimeError("Instagram username and password must be provided!")
-
-        self.logger.info(
-            "Logging in to Instagram for the first time, this may take a while..."
-        )
-        instagram_login_success = self._iclient.login(username, password)
-
-        if not instagram_login_success:
-            raise RuntimeError("Failed to login to Instagram!")
+        self._username = username
+        self._password = password
 
         # Watcher Configuration
         self._mode = mode
 
-    def background_task(self) -> None:
-        if self._iclient_exception.locked() and self._sleeping_until is not None:
-            self.logger.warning(
-                f"Instagram client is locked out! Sleeping until {self._sleeping_until}"
-            )
+    def prepare(self, shutdown_event: Event, file_manager: FileManager) -> None:
+        super().prepare(shutdown_event, file_manager)
+
+        self.logger.info(
+            "Logging in to Instagram for the first time, this may take a while..."
+        )
+        instagram_login_success = self._iclient.login(self._username, self._password)
+
+        if not instagram_login_success:
+            raise RuntimeError("Failed to login to Instagram!")
 
     def upload(
         self, medias: list[tuple[ScratchFile, MediaMetadata]]
