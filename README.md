@@ -1,6 +1,6 @@
 # freebooter
 
-![GitHub Repo stars](https://img.shields.io/github/stars/nefarium/freebooter?style=social)
+[![GitHub Repo stars](https://img.shields.io/github/stars/nefarium/freebooter?style=social)](https://github.com/nefarium/freebooter)
 
 [![wakatime](https://wakatime.com/badge/github/regulad/freebooter.svg)](https://wakatime.com/badge/github/regulad/freebooter)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/nefarium/freebooter/docker-publish.yml)
