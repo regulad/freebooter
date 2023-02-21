@@ -9,7 +9,7 @@ x-common:
 services:
   mariadb:
     image: mariadb:10
-    hostname: maraiadb
+    hostname: mariadb
     restart: always
     ports:
       - "3306:3306/tcp"
