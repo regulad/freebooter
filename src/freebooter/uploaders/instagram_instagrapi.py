@@ -170,96 +170,7 @@ class InstagrapiUploader(Uploader):
         # Freeze has been replaced with a simple sleep.
         self._iclient_exception = Lock()
         self._sleeping_until: datetime.datetime | None = None
-
-        def freeze(
-            reason: str, unfreeze_at: datetime.datetime | None = None, **kwargs: Any
-        ) -> None:
-            assert self._sleeping_until is None, "Already sleeping!"
-
-            time_now = datetime.datetime.now()
-            if unfreeze_at is None:
-                delta = datetime.timedelta(**kwargs)
-                unfreeze_at = time_now + delta
-
-            assert unfreeze_at is not None, "unfreeze_at is None"
-
-            self._sleeping_until = unfreeze_at
-
-            # BLOCKING
-            until_delta = unfreeze_at - time_now
-            self.logger.warning(
-                f'Freezing for "{reason}" until {unfreeze_at}! ({until_delta})'
-            )
-            sleep_for_seconds = max(until_delta.total_seconds(), 0)  # can't be under 0
-            time.sleep(sleep_for_seconds)
-
-            self._sleeping_until = None
-
-        @typing.no_type_check  # from instagrapi, which is not typed
-        def handle_exception(client: Client, e: ClientError) -> None:
-            with self._iclient_exception:
-                if isinstance(e, BadPassword):
-                    client.logger.exception(e)
-                    pass  # client.set_proxy(self.next_proxy().href)
-                    if client.relogin_attempt > 0:
-                        freeze(str(e), days=7)
-                        raise ReloginAttemptExceeded(e)
-                    pass  # client.settings = self.rebuild_client_settings()
-                    return  # return self.update_client_settings(client.get_settings())
-                elif isinstance(e, LoginRequired):
-                    client.logger.exception(e)
-                    client.relogin()
-                    return  # return self.update_client_settings(client.get_settings())
-                elif isinstance(e, ChallengeRequired):
-                    api_path = json_value(client.last_json, "challenge", "api_path")
-                    if api_path == "/challenge/":
-                        pass  # client.set_proxy(self.next_proxy().href)
-                        pass  # client.settings = self.rebuild_client_settings()
-                    else:
-                        try:
-                            client.challenge_resolve(client.last_json)
-                        except ChallengeRequired as e:
-                            freeze("Manual Challenge Required", days=2)
-                            raise e
-                        except (
-                            ChallengeRequired,
-                            SelectContactPointRecoveryForm,
-                            RecaptchaChallengeForm,
-                        ) as e:
-                            freeze(str(e), days=4)
-                            raise e
-                        pass  # self.update_client_settings(client.get_settings())
-                    return  # True
-                elif isinstance(e, FeedbackRequired):
-                    message = client.last_json["feedback_message"]
-                    if "This action was blocked. Please try again later" in message:
-                        freeze(
-                            message, hours=6
-                        )  # this must have been meant to be 6 hours
-                        # client.settings = self.rebuild_client_settings()
-                        # return self.update_client_settings(client.get_settings())
-                    elif (
-                        "We restrict certain activity to protect our community"
-                        in message
-                    ):
-                        # 6 hours is not enough
-                        freeze(message, hours=12)
-                    elif "Your account has been temporarily blocked" in message:
-                        """
-                        Based on previous use of this feature, your account has been temporarily
-                        blocked from taking this action.
-                        This block will expire on 2020-03-27.
-                        """
-                        yyyy_mm_dd = re.search(r"on (\d{4}-\d{2}-\d{2})", message)
-                        unfreeze_at = datetime.datetime.strptime(
-                            yyyy_mm_dd.group(1), "%Y-%m-%d"
-                        )
-                        freeze(message, unfreeze_at=unfreeze_at)
-                elif isinstance(e, PleaseWaitFewMinutes):
-                    freeze(str(e), hours=1)
-                raise e
-
-        self._iclient.handle_exception = handle_exception
+        self._iclient.handle_exception = self._handle_iclient_exception
 
         # 2FA / OTP handling
         self._otp: TOTP | None = TOTP(otp) if otp else None
@@ -295,11 +206,92 @@ class InstagrapiUploader(Uploader):
         # Watcher Configuration
         self._mode = mode
 
-    def prepare(
-        self, shutdown_event: Event, file_manager: FileManager, **kwargs
+    def _freeze(
+        self, reason: str, unfreeze_at: datetime.datetime | None = None, **kwargs: Any
     ) -> None:
-        super().prepare(shutdown_event, file_manager, **kwargs)
+        assert self._sleeping_until is None, "Already sleeping!"
 
+        time_now = datetime.datetime.now()
+        if unfreeze_at is None:
+            delta = datetime.timedelta(**kwargs)
+            unfreeze_at = time_now + delta
+
+        assert unfreeze_at is not None, "unfreeze_at is None"
+
+        self._sleeping_until = unfreeze_at
+
+        # BLOCKING
+        until_delta = unfreeze_at - time_now
+        self.logger.warning(
+            f'Freezing for "{reason}" until {unfreeze_at}! ({until_delta})'
+        )
+        sleep_for_seconds = max(until_delta.total_seconds(), 0)  # can't be under 0
+        time.sleep(sleep_for_seconds)
+
+        self._sleeping_until = None
+
+    @typing.no_type_check  # from instagrapi, which is not typed
+    def _handle_iclient_exception(self, client: Client, e: ClientError) -> None:
+        with self._iclient_exception:
+            if isinstance(e, BadPassword):
+                client.logger.exception(e)
+                pass  # client.set_proxy(self.next_proxy().href)
+                if client.relogin_attempt > 0:
+                    self._freeze(str(e), days=7)
+                    raise ReloginAttemptExceeded(e)
+                pass  # client.settings = self.rebuild_client_settings()
+                return  # return self.update_client_settings(client.get_settings())
+            elif isinstance(e, LoginRequired):
+                client.logger.exception(e)
+                client.relogin()
+                return  # return self.update_client_settings(client.get_settings())
+            elif isinstance(e, ChallengeRequired):
+                api_path = json_value(client.last_json, "challenge", "api_path")
+                if api_path == "/challenge/":
+                    pass  # client.set_proxy(self.next_proxy().href)
+                    pass  # client.settings = self.rebuild_client_settings()
+                else:
+                    try:
+                        client.challenge_resolve(client.last_json)
+                    except ChallengeRequired as e:
+                        self._freeze("Manual Challenge Required", days=2)
+                        raise e
+                    except (
+                        ChallengeRequired,
+                        SelectContactPointRecoveryForm,
+                        RecaptchaChallengeForm,
+                    ) as e:
+                        self._freeze(str(e), days=4)
+                        raise e
+                    pass  # self.update_client_settings(client.get_settings())
+                return  # True
+            elif isinstance(e, FeedbackRequired):
+                message = client.last_json["feedback_message"]
+                if "This action was blocked. Please try again later" in message:
+                    self._freeze(
+                        message, hours=6
+                    )  # this must have been meant to be 6 hours
+                    # client.settings = self.rebuild_client_settings()
+                    # return self.update_client_settings(client.get_settings())
+                elif "We restrict certain activity to protect our community" in message:
+                    # 6 hours is not enough
+                    self._freeze(message, hours=12)
+                elif "Your account has been temporarily blocked" in message:
+                    """
+                    Based on previous use of this feature, your account has been temporarily
+                    blocked from taking this action.
+                    This block will expire on 2020-03-27.
+                    """
+                    yyyy_mm_dd = re.search(r"on (\d{4}-\d{2}-\d{2})", message)
+                    unfreeze_at = datetime.datetime.strptime(
+                        yyyy_mm_dd.group(1), "%Y-%m-%d"
+                    )
+                    self._freeze(message, unfreeze_at=unfreeze_at)
+            elif isinstance(e, PleaseWaitFewMinutes):
+                self._freeze(str(e), hours=1)
+            raise e
+
+    def _load_iclient(self) -> None:
         if self._session_json_path is not None and self._session_json_path.exists():
             self._iclient.load_settings(self._session_json_path)
         else:
@@ -307,10 +299,24 @@ class InstagrapiUploader(Uploader):
                 "Logging in to Instagram for the first time, this may take a while..."
             )
 
-        instagram_login_success = self._iclient.login(self._username, self._password)
-
+    def _save_iclient(self) -> None:
         if self._session_json_path is not None:
             self._iclient.dump_settings(self._session_json_path)
+
+    def close(self) -> None:
+        self._save_iclient()
+        self._iclient.private.close()
+        self._iclient.public.close()
+        super().close()
+
+    def prepare(
+        self, shutdown_event: Event, file_manager: FileManager, **kwargs
+    ) -> None:
+        super().prepare(shutdown_event, file_manager, **kwargs)
+
+        self._load_iclient()
+        instagram_login_success = self._iclient.login(self._username, self._password)
+        self._save_iclient()
 
         if not instagram_login_success:
             raise RuntimeError("Failed to login to Instagram!")
