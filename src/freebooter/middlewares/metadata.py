@@ -90,20 +90,28 @@ class MetadataModifier(Middleware):
             raise ValueError("No metadata to modify!")
 
     @staticmethod
-    def format_description(string: str, tags: list[str]) -> str:
+    def format_description(string: str, tags: list[str], categories: list[str]) -> str:
         formatter = Formatter()
         # in the future, this may not allow the access of dunder methods/attributes
         # but at a small scale it's not a big deal
 
         randtags_list = tags.copy()
         random.shuffle(randtags_list)
-
         randtags = " ".join(randtags_list[:10])
+
+        randhtags_list = [f"#{tag}" for tag in tags]
+        random.shuffle(randhtags_list)
+        randhtags = " ".join(randhtags_list[:10])
+
+        randcategory = random.choice(categories)
 
         return formatter.format(
             string,
             tags=tags,
             randtags=randtags,
+            randhtags=randhtags,
+            categories=categories,
+            randcategory=randcategory,
         )
 
     def _process(
@@ -134,7 +142,7 @@ class MetadataModifier(Middleware):
                 title = self._title
 
             if isinstance(title, str):
-                title = self.format_description(title, tags)
+                title = self.format_description(title, tags, categories)
 
         if not isinstance(self._description, MissingType):
             if isinstance(self._description, list):
@@ -143,7 +151,7 @@ class MetadataModifier(Middleware):
                 description = self._description
 
             if isinstance(description, str):
-                description = self.format_description(description, tags)
+                description = self.format_description(description, tags, categories)
 
         # cannot modify media_id, media_type, or data
 
