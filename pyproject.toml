@@ -38,6 +38,7 @@ moviepy = ">=1.0.3"  # unlisted dependency of instagrapi
 pillow-heif = "^0.9.3"
 instaloader = "^4.9.6"  # more mature than instagrapi but only supports reading
 tweepy = "^4.12.1"  # more mature than stweet
+tor-python-easy = "^0.1.5"
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.4.5"

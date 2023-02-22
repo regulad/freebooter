@@ -2189,6 +2189,22 @@ files = [
 ]
 
 [[package]]
+name = "tor-python-easy"
+version = "0.1.5"
+description = "Simple library to manage tor proxy and IP changes"
+category = "main"
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    {file = "tor-python-easy-0.1.5.tar.gz", hash = "sha256:e4b0618b9a0bc8e3415cf68274af5f7759b96f37060a34377845624e9f1ab01d"},
+    {file = "tor_python_easy-0.1.5-py3-none-any.whl", hash = "sha256:c154fa30e301fa8cf3b0f7563ec55bbc6abd54a57fccf6a96357ee3529b11aad"},
+]
+
+[package.dependencies]
+PySocks = ">=1.7.1,<2.0.0"
+requests = ">=2.26.0,<3.0.0"
+
+[[package]]
 name = "tox"
 version = "4.4.6"
 description = "tox is a generic virtualenv management and test command line tool"
@@ -2343,14 +2359,14 @@ files = [
 
 [[package]]
 name = "types-pillow"
-version = "9.4.0.15"
+version = "9.4.0.16"
 description = "Typing stubs for Pillow"
 category = "dev"
 optional = false
 python-versions = "*"
 files = [
-    {file = "types-Pillow-9.4.0.15.tar.gz", hash = "sha256:97b34c4592f38a8ef6d4cec236fcf913f62a9a7831d6034f227695dbfcaeb8b4"},
-    {file = "types_Pillow-9.4.0.15-py3-none-any.whl", hash = "sha256:6f53bc6dd6aa9d6512432b978e61a2bb8bec8d7faa6bd2e5281f0f25afad3d02"},
+    {file = "types-Pillow-9.4.0.16.tar.gz", hash = "sha256:3d72ffd2edd5ccd2ef6b6566ed3e57e6e7bd8051d092064e1c68ee0acff44a45"},
+    {file = "types_Pillow-9.4.0.16-py3-none-any.whl", hash = "sha256:9bcdf7ddf2b84b19ee89e8ade90fd214e6dfa67abb31cd2b07ac33a2fe4133ac"},
 ]
 
 [[package]]
@@ -2644,4 +2660,4 @@ websockets = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11,<3.13"  # feedparser uses cgi which will be removed in 3.13
-content-hash = "a9b42ff14dea16871e57c5e2cd5f45d96b1364c704ef04a3ed57403d225b6f9c"
+content-hash = "80b233bcbf9519634feeff927bbdf1ff9fbe6bb311dc5044257d95b7f8bb9dc4"
