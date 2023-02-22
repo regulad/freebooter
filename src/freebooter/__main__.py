@@ -315,7 +315,7 @@ def main() -> None:
         database=db_database,
         password=db_password,
         pool_name="freebooter",
-        pool_size=min(len(config_watchers), 64),
+        pool_size=min(max(len(config_watchers), 5), 64),
     )
 
     logger.info("Done.")
@@ -363,13 +363,13 @@ def main() -> None:
 
     with ThreadPoolExecutor(
         thread_name_prefix="Uploader", max_workers=max_workers
-    ) as upload_executor:
+    ) as callback_executor:
         # Preparing
         prepare_kwargs = {
             # Defaults
             "shutdown_event": shutdown_event,
             "file_manager": file_manager,
-            "callback": partial(callback, executor=upload_executor),
+            "callback": partial(callback, executor=callback_executor),
             "pool": pool,
             # For special use cases
             "uploaders": config_uploaders,
@@ -377,7 +377,14 @@ def main() -> None:
             "watchers": config_watchers,
         }
 
-        with ThreadPoolExecutor(thread_name_prefix="Setup") as setup_executor:
+        total_items_to_prepare = (
+            len(config_uploaders) + len(config_middlewares) + len(config_watchers)
+        )
+        prepare_workers_needed = min(max_workers, total_items_to_prepare)
+
+        with ThreadPoolExecutor(
+            thread_name_prefix="Setup", max_workers=prepare_workers_needed
+        ) as setup_executor:
             logger.info("Preparing...")
             setup_futures: list[Future[None]] = []
             for uploader in config_uploaders:
@@ -415,15 +422,17 @@ def main() -> None:
             watcher.close()
         logger.info("Done.")
 
-        logger.info("Closing middlewares...")
-        for middleware in config_middlewares:
-            middleware.close()
-        logger.info("Done.")
+    # Wait until after the executor shutdown is set to close the middlewares and uploaders as they may still be needed
 
-        logger.info("Closing uploaders...")
-        for uploader in config_uploaders:
-            uploader.close()
-        logger.info("Done.")
+    logger.info("Closing middlewares...")
+    for middleware in config_middlewares:
+        middleware.close()
+    logger.info("Done.")
+
+    logger.info("Closing uploaders...")
+    for uploader in config_uploaders:
+        uploader.close()
+    logger.info("Done.")
 
     logger.info("Closing MariaDB connection pool...")
     pool.close()

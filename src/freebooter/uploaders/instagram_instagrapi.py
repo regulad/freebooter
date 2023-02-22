@@ -18,9 +18,12 @@
 from __future__ import annotations
 
 import datetime
+import json
+import random
 import re
 import time
 import typing
+from pathlib import Path
 from threading import Lock, Event
 from typing import Any, Literal
 
@@ -44,6 +47,7 @@ from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
 from .common import Uploader
+from .._assets import ASSETS
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
@@ -69,8 +73,11 @@ class InstagrapiUploader(Uploader):
         insta_settings: dict[str, Any] | None = None,
         insta_kwargs: dict[str, Any] | None = None,
         retry_count: int = 5,
+        session_json_path: str | None = None,
         # Uploader settings
-        mode: Literal["singleton", "story", "album", "reels", "igtv"] = "singleton",
+        mode: Literal[
+            "singleton", "story", "album", "reels", "igtv", "hybrid"
+        ] = "singleton",
         **config,
     ) -> None:
         """
@@ -91,9 +98,11 @@ class InstagrapiUploader(Uploader):
         :param insta_kwargs: A dictionary of keyword arguments to pass to the instagrapi client.
         See the instagrapi documentation.
         :param retry_count: The number of times to retry a request before giving up.
+        :param session_json_path: The path to a JSON file containing the session data for the instagrapi client.
         :param mode: The mode to use for the upload. This can be one of the following: "singleton" - Uploads the
         file as a single post. "story" - Uploads the file as a story. "album" - Uploads the file as an album.
-        "reels" - Uploads the file as a reels post. "igtv" - Uploads the file as an IGTV video.
+        "reels" - Uploads the file as a reels post. "igtv" - Uploads the file as an IGTV video. "hybrid" - Uploads
+        photos as posts and videos as reels.
         :param config: Additional configuration options for the uploader.
         """
         super().__init__(name, preprocessors, **config)
@@ -111,6 +120,14 @@ class InstagrapiUploader(Uploader):
         insta_settings_nonnull.setdefault("country", "US")
         insta_settings_nonnull.setdefault("locale", "en_US")
         insta_settings_nonnull.setdefault("country_code", 1)
+
+        if "device_settings" not in insta_settings_nonnull:
+            with (ASSETS / "devices3.json").open("r") as fp:
+                devices: list[dict] = json.load(fp)
+
+            device: dict = random.choice(devices)
+
+            insta_settings_nonnull["device_settings"] = device["fields"]
 
         # time handling, which is "nice" in python
         if "timezone_offset" not in insta_settings_nonnull:
@@ -267,6 +284,14 @@ class InstagrapiUploader(Uploader):
         self._username = username
         self._password = password
 
+        # Session JSON Storage
+        self._session_json_path = Path(session_json_path) if session_json_path else None
+        if self._session_json_path is not None:
+            if not self._session_json_path.is_absolute():
+                self._session_json_path = self._session_json_path.absolute()
+
+            self._session_json_path.parent.mkdir(parents=True, exist_ok=True)
+
         # Watcher Configuration
         self._mode = mode
 
@@ -275,10 +300,17 @@ class InstagrapiUploader(Uploader):
     ) -> None:
         super().prepare(shutdown_event, file_manager, **kwargs)
 
-        self.logger.info(
-            "Logging in to Instagram for the first time, this may take a while..."
-        )
+        if self._session_json_path is not None and self._session_json_path.exists():
+            self._iclient.load_settings(self._session_json_path)
+        else:
+            self.logger.info(
+                "Logging in to Instagram for the first time, this may take a while..."
+            )
+
         instagram_login_success = self._iclient.login(self._username, self._password)
+
+        if self._session_json_path is not None:
+            self._iclient.dump_settings(self._session_json_path)
 
         if not instagram_login_success:
             raise RuntimeError("Failed to login to Instagram!")
@@ -291,7 +323,7 @@ class InstagrapiUploader(Uploader):
         instagram_medias: list[tuple[ScratchFile, InstagramMedia | Story | None]] = []
 
         match self._mode:
-            case "singleton" | "reels":
+            case "singleton" | "hybrid":
                 for media, metadata in medias:
                     try:
                         match metadata.type:
@@ -352,14 +384,45 @@ class InstagrapiUploader(Uploader):
                                         )
                                     )
                             case MediaType.VIDEO:
-                                instagram_medias.append(
-                                    (
-                                        media,
-                                        self._iclient.video_upload(
-                                            media.path, metadata.description
-                                        ),
+                                if self._mode == "singleton":
+                                    instagram_medias.append(
+                                        (
+                                            media,
+                                            self._iclient.video_upload(
+                                                media.path, metadata.description
+                                            ),
+                                        )
                                     )
-                                )
+                                elif self._mode == "hybrid":
+                                    instagram_medias.append(
+                                        (
+                                            media,
+                                            self._iclient.clip_upload(
+                                                media.path, metadata.description
+                                            ),
+                                        )
+                                    )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to upload {media.path} to Instagram: {e}"
+                        )
+                        instagram_medias.append((media, None))
+                        continue
+            case "reels":
+                for media, metadata in medias:
+                    try:
+                        if metadata.type != MediaType.VIDEO:  # We can't do this.
+                            instagram_medias.append((media, None))
+                            continue
+
+                        instagram_medias.append(
+                            (
+                                media,
+                                self._iclient.clip_upload(
+                                    media.path, metadata.description
+                                ),
+                            )
+                        )
                     except Exception as e:
                         self.logger.error(
                             f"Failed to upload {media.path} to Instagram: {e}"
