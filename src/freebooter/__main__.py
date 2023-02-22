@@ -45,7 +45,7 @@ import yaml
 from dislog import DiscordWebhookHandler
 from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
-from mariadb import ConnectionPool
+from mariadb import ConnectionPool, Connection, PoolError
 from oauthlib.oauth2 import OAuth2Token
 from pillow_heif import register_heif_opener
 from tweepy import OAuth1UserHandler
@@ -257,47 +257,35 @@ def main() -> None:
 
     logger.info("Scratch folder and config folder setup.")
 
-    # Load MariaDB configuration
+    # Load configuration LEGACY
 
-    db_host = environ.get("FREEBOOTER_MYSQL_HOST", "localhost")
-    db_port = int(environ.get("FREEBOOTER_MYSQL_PORT", "3306"))
-    db_database = environ.get("FREEBOOTER_MYSQL_DATABASE", "freebooter")
-    db_user = environ.get("FREEBOOTER_MYSQL_USER", "freebooter")
-    db_password = environ.get("FREEBOOTER_MYSQL_PASSWORD", "password")
+    logger.info("Loading configuration...")
+    configuration: Configuration
+    if "FREEBOOTER_CONFIG_FILE" in environ:
+        config_location = environ.get("FREEBOOTER_CONFIG_FILE", "./config/config.yml")
+        config_path = Path(config_location)
 
-    logger.info("MariaDB configuration loaded.")
+        if not config_path.is_absolute():
+            config_path = config_path.absolute()
 
-    # Load configuration
+        if not config_path.exists():
+            logger.error(f"Config file {config_path} does not exist.")
+            sys.exit(1)
 
-    config_location = environ.get("FREEBOOTER_CONFIG_FILE", "./config/config.yml")
-    config_path = Path(config_location)
+        config_data: Any
 
-    if not config_path.is_absolute():
-        config_path = config_path.absolute()
+        with FileIO(config_path, "r") as config_file:
+            config_file_name: Path = cast("Path", config_file.name)
+            file_extension = splitext(config_file_name)[1]
+            if file_extension == ".yml" or file_extension == ".yaml":
+                config_data = yaml.load(config_file, Loader)
+            else:
+                config_data = json.load(config_file)
 
-    if not config_path.exists():
-        logger.error(f"Config file {config_path} does not exist.")
-        sys.exit(1)
-
-    config_data: Any
-
-    with FileIO(config_path, "r") as config_file:
-        config_file_name: Path = cast("Path", config_file.name)
-        file_extension = splitext(config_file_name)[1]
-        if file_extension == ".yml" or file_extension == ".yaml":
-            config_data = yaml.load(config_file, Loader)
-        else:
-            config_data = json.load(config_file)
-
-    logger.info("Validating config...")
-
-    CONFIG_SCHEMA_CHECK(config_data)
-
-    logger.info("Config OK.")
-
-    logger.info("Loading config...")
-
-    config_middlewares, config_watchers, config_uploaders = load_config(config_data)
+        configuration = LegacyYamlConfiguration(config_data)
+    else:
+        logger.error("No configuration file provided.")
+        sys.exit()
 
     # Now we start opening connections and running our code:
 
@@ -308,15 +296,63 @@ def main() -> None:
 
     logger.info("Initializing MariaDB connection pool...")
 
+    db_host = environ.get("FREEBOOTER_MYSQL_HOST", "localhost")
+    db_port = int(environ.get("FREEBOOTER_MYSQL_PORT", "3306"))
+    db_database = environ.get("FREEBOOTER_MYSQL_DATABASE", "freebooter")
+    db_user = environ.get("FREEBOOTER_MYSQL_USER", "freebooter")
+    db_password = environ.get("FREEBOOTER_MYSQL_PASSWORD", "password")
+
+    mariadb_connection_kwargs = {
+        "host": db_host,
+        "port": db_port,
+        "user": db_user,
+        "database": db_database,
+        "password": db_password,
+    }
+
+    logger.info("MariaDB configuration loaded.")
+
     pool = ConnectionPool(
-        host=db_host,
-        port=db_port,
-        user=db_user,
-        database=db_database,
-        password=db_password,
         pool_name="freebooter",
-        pool_size=min(max(len(config_watchers), 5), 64),
+        pool_size=max_workers,
+        **mariadb_connection_kwargs,
     )
+
+    # Override the get_connection method to make new connections if one doesn't exist
+
+    default_get_connection = pool.get_connection
+
+    def get_connection() -> Connection:
+        """
+        Get a connection from the pool.
+        This is not implemented correctly in MariaDB's connector, so we have to override it.
+        """
+        existing_connection: Connection | None
+        try:
+            existing_connection = default_get_connection()
+        except (
+            PoolError
+        ):  # This will never actually get raised, but it is here incase it gets implemented
+            existing_connection = None
+
+        if existing_connection is not None:
+            return existing_connection
+
+        if hasattr(pool, "_conn_args"):
+            connection_args = pool._conn_args
+        else:
+            connection_args = mariadb_connection_kwargs
+
+        new_connection = Connection(**connection_args)
+
+        try:
+            pool.add_connection(new_connection)
+        except PoolError:
+            pass  # This connection will have to exist outside the pool.
+
+        return new_connection
+
+    pool.get_connection = get_connection
 
     logger.info("Done.")
 
@@ -328,7 +364,7 @@ def main() -> None:
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         logger.debug(f"Running middlewares on {len(medias)} files...")
 
-        for middleware in config_middlewares:
+        for middleware in configuration.middlewares():
             medias = middleware.process_many(medias)
 
         logger.debug(
@@ -337,13 +373,11 @@ def main() -> None:
 
         out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
 
-        with ThreadPoolExecutor(
-            max_workers=min(max_workers, len(config_uploaders))
-        ) as upload_executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as upload_executor:
             uploader_futures: list[
                 Future[list[tuple[ScratchFile, MediaMetadata | None]]]
             ] = []
-            for uploader in config_uploaders:
+            for uploader in configuration.uploaders():
                 uploader_futures.append(
                     upload_executor.submit(uploader.upload_and_preprocess, medias)
                 )
@@ -366,34 +400,26 @@ def main() -> None:
     ) as callback_executor:
         # Preparing
         prepare_kwargs = {
-            # Defaults
             "shutdown_event": shutdown_event,
             "file_manager": file_manager,
             "callback": partial(callback, executor=callback_executor),
             "pool": pool,
-            # For special use cases
-            "uploaders": config_uploaders,
-            "middlewares": config_middlewares,
-            "watchers": config_watchers,
+            "configuration": configuration,
         }
 
-        total_items_to_prepare = (
-            len(config_uploaders) + len(config_middlewares) + len(config_watchers)
-        )
-        prepare_workers_needed = min(max_workers, total_items_to_prepare)
-
         with ThreadPoolExecutor(
-            thread_name_prefix="Setup", max_workers=prepare_workers_needed
+            thread_name_prefix="Setup",
+            max_workers=max_workers,
         ) as setup_executor:
             logger.info("Preparing...")
             setup_futures: list[Future[None]] = []
-            for uploader in config_uploaders:
+            for uploader in configuration.uploaders():
                 future = setup_executor.submit(uploader.prepare, **prepare_kwargs)
                 setup_futures.append(future)
-            for middleware in config_middlewares:
+            for middleware in configuration.middlewares():
                 future = setup_executor.submit(middleware.prepare, **prepare_kwargs)
                 setup_futures.append(future)
-            for watcher in config_watchers:
+            for watcher in configuration.watchers():
                 future = setup_executor.submit(watcher.prepare, **prepare_kwargs)
                 setup_futures.append(future)
             for future in setup_futures:
@@ -402,7 +428,7 @@ def main() -> None:
 
         # Start watchers
         logger.info("Starting watchers...")
-        for watcher in config_watchers:
+        for watcher in configuration.watchers():
             watcher.start()
         logger.info("Done.")
 
@@ -418,19 +444,19 @@ def main() -> None:
             shutdown_event.set()
 
         logger.info("Closing watchers...")
-        for watcher in config_watchers:
+        for watcher in configuration.watchers():
             watcher.close()
         logger.info("Done.")
 
     # Wait until after the executor shutdown is set to close the middlewares and uploaders as they may still be needed
 
     logger.info("Closing middlewares...")
-    for middleware in config_middlewares:
+    for middleware in configuration.middlewares():
         middleware.close()
     logger.info("Done.")
 
     logger.info("Closing uploaders...")
-    for uploader in config_uploaders:
+    for uploader in configuration.uploaders():
         uploader.close()
     logger.info("Done.")
 

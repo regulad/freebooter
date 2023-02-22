@@ -17,6 +17,7 @@
 """
 
 from .file_management import *
+from .config import *
 from .metadata import *
 from .middlewares import *
 from .uploaders import *
