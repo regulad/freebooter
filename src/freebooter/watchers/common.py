@@ -132,6 +132,9 @@ class Watcher(Thread, metaclass=ABCMeta):
         for middleware in self.preprocessors:
             middleware.close()
 
+        if self._shutdown_event is not None and self._shutdown_event.is_set():
+            self.join()  # just wait for it to spin down
+
     def mark_handled(self, id_: str, is_handled: bool = True) -> None:
         """
         Marks the given ID as handled in the database
@@ -197,7 +200,7 @@ class Watcher(Thread, metaclass=ABCMeta):
     ) -> None:
         assert self._callback, "No callback set!"
 
-        self.logger.info(f"{self.name} is processing {len(downloaded)} output(s)")
+        self.logger.debug(f"{self.name} is processing {len(downloaded)} output(s)")
 
         for preprocessor in self.preprocessors:
             downloaded = preprocessor.process_many(downloaded)
@@ -232,9 +235,7 @@ class Watcher(Thread, metaclass=ABCMeta):
 
         fut.add_done_callback(cleanup)
 
-        self.logger.info(
-            f"{self.name} started execution with {len(downloaded)} output(s)"
-        )
+        self.logger.info(f"{self.name} passed on {len(downloaded)} output(s)")
 
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"

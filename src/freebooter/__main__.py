@@ -18,7 +18,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 import webbrowser
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor, Future, Executor
@@ -227,7 +229,11 @@ def main() -> None:
         )
         rootLogger.addHandler(handler)
 
+    logger.info("Logging configured successfully.")
+
     # setup folders
+
+    logger.info("Setting up scratch folder and config folder...")
 
     scratch_folder = Path(environ.get("FREEBOOTER_SCRATCH", "scratch"))
 
@@ -249,7 +255,9 @@ def main() -> None:
 
     file_manager = FileManager(scratch_folder)
 
-    # MariaDB configuration
+    logger.info("Scratch folder and config folder setup.")
+
+    # Load MariaDB configuration
 
     db_host = environ.get("FREEBOOTER_MYSQL_HOST", "localhost")
     db_port = int(environ.get("FREEBOOTER_MYSQL_PORT", "3306"))
@@ -257,7 +265,7 @@ def main() -> None:
     db_user = environ.get("FREEBOOTER_MYSQL_USER", "freebooter")
     db_password = environ.get("FREEBOOTER_MYSQL_PASSWORD", "password")
 
-    logger.info("MariaDB configuration OK.")
+    logger.info("MariaDB configuration loaded.")
 
     # Load configuration
 
@@ -281,7 +289,6 @@ def main() -> None:
         else:
             config_data = json.load(config_file)
 
-    # config loading/validation
     logger.info("Validating config...")
 
     CONFIG_SCHEMA_CHECK(config_data)
@@ -292,7 +299,11 @@ def main() -> None:
 
     config_middlewares, config_watchers, config_uploaders = load_config(config_data)
 
-    # Now we send it!
+    # Now we start opening connections and running our code:
+
+    # This is copied from threading.futures.ThreadPoolExecutor, but with a maximum of 64 instead of 32
+    max_workers = min(64, (os.cpu_count() or 1) + 4)
+
     # MariaDB startup
 
     logger.info("Initializing MariaDB connection pool...")
@@ -301,6 +312,7 @@ def main() -> None:
         host=db_host,
         port=db_port,
         user=db_user,
+        database=db_database,
         password=db_password,
         pool_name="freebooter",
         pool_size=min(len(config_watchers), 64),
@@ -325,7 +337,9 @@ def main() -> None:
 
         out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
 
-        with ThreadPoolExecutor(max_workers=len(config_uploaders)) as upload_executor:
+        with ThreadPoolExecutor(
+            max_workers=min(max_workers, len(config_uploaders))
+        ) as upload_executor:
             uploader_futures: list[
                 Future[list[tuple[ScratchFile, MediaMetadata | None]]]
             ] = []
@@ -347,15 +361,15 @@ def main() -> None:
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         return executor.submit(upload_handler, medias)
 
-    logger.info("Done.")
-
-    with ThreadPoolExecutor(thread_name_prefix="Uploader") as executor:
+    with ThreadPoolExecutor(
+        thread_name_prefix="Uploader", max_workers=max_workers
+    ) as upload_executor:
         # Preparing
         prepare_kwargs = {
             # Defaults
             "shutdown_event": shutdown_event,
             "file_manager": file_manager,
-            "callback": partial(callback, executor=executor),
+            "callback": partial(callback, executor=upload_executor),
             "pool": pool,
             # For special use cases
             "uploaders": config_uploaders,
@@ -364,85 +378,52 @@ def main() -> None:
         }
 
         with ThreadPoolExecutor(thread_name_prefix="Setup") as setup_executor:
-            logger.info("Preparing uploaders...")
-            upload_prepare_futures: list[Future[None]] = []
+            logger.info("Preparing...")
+            setup_futures: list[Future[None]] = []
             for uploader in config_uploaders:
                 future = setup_executor.submit(uploader.prepare, **prepare_kwargs)
-                upload_prepare_futures.append(future)
-            for future in upload_prepare_futures:
-                future.result()
-            logger.info("Done.")
-
-            logger.info("Preparing middlewares...")
-            middleware_prepare_futures: list[Future[None]] = []
+                setup_futures.append(future)
             for middleware in config_middlewares:
                 future = setup_executor.submit(middleware.prepare, **prepare_kwargs)
-                middleware_prepare_futures.append(future)
-            for future in middleware_prepare_futures:
-                future.result()
-            logger.info("Done.")
-
-            logger.info("Preparing watchers...")
-            watcher_prepare_futures: list[Future[None]] = []
+                setup_futures.append(future)
             for watcher in config_watchers:
                 future = setup_executor.submit(watcher.prepare, **prepare_kwargs)
-                watcher_prepare_futures.append(future)
-            for future in watcher_prepare_futures:
+                setup_futures.append(future)
+            for future in setup_futures:
                 future.result()
             logger.info("Done.")
 
-            # Start
-            # logger.info("Starting uploaders...")
-            # for uploader in config_uploaders:
-            #     uploader.start()
-            # logger.info("Done.")
-
-            # logger.info("Starting middlewares...")
-            # for middleware in config_middlewares:
-            #     middleware.start()
-            # logger.info("Done.")
-
-            logger.info("Starting watchers...")
-            for watcher in config_watchers:
-                watcher.start()
-            logger.info("Done.")
+        # Start watchers
+        logger.info("Starting watchers...")
+        for watcher in config_watchers:
+            watcher.start()
+        logger.info("Done.")
 
         try:
-            shutdown_event.wait()
+            if os.name == "nt":
+                # Windows doesn't wait on this event correctly, so we have to do it ourselves
+                while not shutdown_event.is_set():
+                    time.sleep(1)
+            else:
+                shutdown_event.wait()
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received, shutting down...")
             shutdown_event.set()
 
-        logger.info("Waiting for watchers to finish...")
+        logger.info("Closing watchers...")
         for watcher in config_watchers:
-            watcher.join()
             watcher.close()
         logger.info("Done.")
 
-    # We are out of the executor now. We can't use it anymore. Only watchers should have used it, so we are ok.
+        logger.info("Closing middlewares...")
+        for middleware in config_middlewares:
+            middleware.close()
+        logger.info("Done.")
 
-    # logger.info("Waiting for middlewares to finish...")
-    # for middleware in config_middlewares:
-    #     middleware.join()
-    #     middleware.close()
-    # logger.info("Done.")
-
-    # logger.info("Waiting for uploaders to finish...")
-    # for uploader in config_uploaders:
-    #     uploader.join()
-    #     uploader.close()
-    # logger.info("Done.")
-
-    # Even though middlewares & uploaders aren't threads anymore, we still need to do some shutdown.
-    logger.info("Closing middlewares...")
-    for middleware in config_middlewares:
-        middleware.close()
-    logger.info("Done.")
-
-    logger.info("Closing uploaders...")
-    for uploader in config_uploaders:
-        uploader.close()
-    logger.info("Done.")
+        logger.info("Closing uploaders...")
+        for uploader in config_uploaders:
+            uploader.close()
+        logger.info("Done.")
 
     logger.info("Closing MariaDB connection pool...")
     pool.close()

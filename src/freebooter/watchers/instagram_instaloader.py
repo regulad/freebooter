@@ -101,6 +101,7 @@ class InstaloaderWatcher(Watcher):
         self._userid = userid
 
     def close(self) -> None:
+        super().close()
         if self._iloader is not None and self._use_default_iloader:
             self._iloader.close()
 
