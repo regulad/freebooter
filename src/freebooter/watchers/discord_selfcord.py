@@ -27,7 +27,7 @@ from selfcord.ext.commands.bot import Bot
 from .common import AsyncioWatcher
 from ..middlewares import Middleware
 from ..file_management import ScratchFile
-from ..metadata import MediaMetadata, Platform
+from ..metadata import MediaMetadata, Platform, MediaType
 
 null_handler = NullHandler()
 getLogger("selfcord").setLevel(INFO if __debug__ else WARNING)
@@ -98,6 +98,7 @@ class SelfcordWatcher(AsyncioWatcher):
                 platform=Platform.DISCORD,
                 title=attachment.filename,
                 description=message.content,
+                media_type=MediaType.from_file_path(scratch_file.path),
                 data={"attachment": attachment.to_dict()},
             )
 

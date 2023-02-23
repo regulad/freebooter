@@ -31,7 +31,7 @@ from jishaku.repl import Scope
 from .common import AsyncioWatcher
 from ..middlewares import Middleware
 from ..file_management import ScratchFile
-from ..metadata import MediaMetadata, Platform
+from ..metadata import MediaMetadata, Platform, MediaType
 
 null_handler = NullHandler()
 discord.utils.setup_logging(
@@ -108,6 +108,7 @@ class DiscordPyWatcher(AsyncioWatcher):
                 platform=Platform.DISCORD,
                 title=attachment.filename,
                 description=message.content,
+                media_type=MediaType.from_file_path(scratch_file.path),
                 data={"attachment": attachment.to_dict()},
             )
 
