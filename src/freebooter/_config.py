@@ -18,13 +18,13 @@
 from __future__ import annotations
 
 import json
-from functools import partial
 from typing import Any, Type, Mapping, Generator
 
 import jsonschema
 
-from .config import Configuration
+from . import SelfcordWatcher
 from ._assets import ASSETS
+from .config import Configuration
 from .middlewares import Middleware, MetadataModifier, MediaCollector, Dropper
 from .uploaders import (
     Uploader,
@@ -32,6 +32,7 @@ from .uploaders import (
     YouTubeDataAPIV3Uploader,
     LocalMediaStorage,
     TweepyTwitterUploader,
+    DiscordWebhookUploader,
 )
 from .util import FrozenDict
 from .watchers import (
@@ -41,6 +42,7 @@ from .watchers import (
     RSSWatcher,
     LocalMediaLoader,
     InstaloaderWatcher,
+    DiscordPyWatcher,
 )
 
 CONFIG_SCHEMA_TRAVERSABLE = ASSETS / "config-schema.json"
@@ -71,6 +73,8 @@ WATCHERS: Mapping[str, Type[Watcher]] = FrozenDict(
         "pusher": Pusher,
         "instagram": InstaloaderWatcher,
         "local": LocalMediaLoader,
+        "discord": DiscordPyWatcher,
+        "selfcord": SelfcordWatcher,
     }
 )
 
@@ -80,6 +84,7 @@ UPLOADERS: Mapping[str, Type[Uploader]] = FrozenDict(
         "youtube": YouTubeDataAPIV3Uploader,
         "local": LocalMediaStorage,
         "twitter": TweepyTwitterUploader,
+        "discord": DiscordWebhookUploader,
     }
 )
 

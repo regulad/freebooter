@@ -17,14 +17,16 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import sys
-import time
 import webbrowser
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor, Future, Executor
 from functools import partial
+from importlib.util import find_spec
 from io import FileIO
 from logging import (
     basicConfig,
@@ -39,7 +41,7 @@ from os import environ
 from os.path import splitext
 from pathlib import Path
 from threading import Event
-from typing import cast, Any
+from typing import cast, Any, Coroutine
 
 import yaml
 from dislog import DiscordWebhookHandler
@@ -57,8 +59,7 @@ from .util import (
     Loader,
 )  # Using a loader that supports !include makes our config files much more readable.
 
-logger: Logger = getLogger(__name__)
-rootLogger = Logger.root
+logger = getLogger(__name__)
 
 # Init helper libraries
 register_heif_opener()  # Enables Pillow to open HEIF files
@@ -200,20 +201,35 @@ def main() -> None:
     # note: I would *love* to do this all with asyncio, but since literally EVERY SINGLE LIBRARY is blocking, it's only
     # going to be possible with a shitload of asyncio.to_thread calls or with threads, which is what I did here.
 
-    # logging configuration
-    standard_handler: StreamHandler = StreamHandler(sys.stdout)
-    error_handler: StreamHandler = StreamHandler(sys.stderr)
-
-    standard_handler.addFilter(
-        lambda record: record.levelno < ERROR
-    )  # keep errors to stderr
-    error_handler.setLevel(ERROR)
-
-    basicConfig(
-        format="%(asctime)s\t%(levelname)s\t%(name)s@%(threadName)s: %(message)s",
-        level=DEBUG if __debug__ else INFO,
-        handlers=[standard_handler, error_handler],
+    # Asyncio stuff - for d.py & future use
+    loop = asyncio.new_event_loop()
+    loop.set_exception_handler(
+        lambda eloop, context: logging.error(f"Exception in {eloop}: {context}")
     )
+
+    # logging configuration
+    if find_spec("discord") is not None:
+        # Use discord.py's magic to do the logging setup, if we have it
+        from discord.utils import setup_logging
+
+        setup_logging(level=DEBUG if __debug__ else INFO)
+    else:
+        # Otherwise, do what we do ourselves.
+        standard_handler: StreamHandler = StreamHandler(sys.stdout)
+        error_handler: StreamHandler = StreamHandler(sys.stderr)
+
+        standard_handler.addFilter(
+            lambda record: record.levelno < ERROR
+        )  # keep errors to stderr
+        error_handler.setLevel(ERROR)
+
+        basicConfig(
+            format="%(asctime)s\t%(levelname)s\t%(name)s@%(threadName)s: %(message)s",
+            level=DEBUG if __debug__ else INFO,
+            handlers=[standard_handler, error_handler],
+        )
+
+    # dislog
 
     dislog_url: str | None = environ.get("FREEBOOTER_DISCORD_WEBHOOK")
 
@@ -226,14 +242,15 @@ def main() -> None:
             dislog_url,
             level=INFO,  # debug is just too much for discord to handle
             text_send_on_error=dislog_message,
+            run_async=True,
         )
-        rootLogger.addHandler(handler)
+        getLogger().addHandler(handler)
 
-    logger.info("Logging configured successfully.")
+    logger.debug("Logging configured successfully.")
 
     # setup folders
 
-    logger.info("Setting up scratch folder and config folder...")
+    logger.debug("Setting up scratch folder and config folder...")
 
     scratch_folder = Path(environ.get("FREEBOOTER_SCRATCH", "scratch"))
 
@@ -255,11 +272,11 @@ def main() -> None:
 
     file_manager = FileManager(scratch_folder)
 
-    logger.info("Scratch folder and config folder setup.")
+    logger.debug("Scratch folder and config folder setup.")
 
     # Load configuration LEGACY
 
-    logger.info("Loading configuration...")
+    logger.debug("Loading configuration...")
     configuration: Configuration
     if "FREEBOOTER_CONFIG_FILE" in environ:
         config_location = environ.get("FREEBOOTER_CONFIG_FILE", "./config/config.yml")
@@ -294,7 +311,7 @@ def main() -> None:
 
     # MariaDB startup
 
-    logger.info("Initializing MariaDB connection pool...")
+    logger.debug("Initializing MariaDB connection pool...")
 
     db_host = environ.get("FREEBOOTER_MYSQL_HOST", "localhost")
     db_port = int(environ.get("FREEBOOTER_MYSQL_PORT", "3306"))
@@ -310,7 +327,7 @@ def main() -> None:
         "password": db_password,
     }
 
-    logger.info("MariaDB configuration loaded.")
+    logger.debug("MariaDB configuration loaded.")
 
     pool = ConnectionPool(
         pool_name="freebooter",
@@ -354,9 +371,9 @@ def main() -> None:
 
     pool.get_connection = get_connection
 
-    logger.info("Done.")
+    logger.debug("Done.")
 
-    # get stuff ready for watchers
+    # Ready thread-based watchers
     shutdown_event = Event()
 
     def upload_handler(
@@ -405,13 +422,14 @@ def main() -> None:
             "callback": partial(callback, executor=callback_executor),
             "pool": pool,
             "configuration": configuration,
+            "event_loop": loop,
         }
 
         with ThreadPoolExecutor(
             thread_name_prefix="Setup",
             max_workers=max_workers,
         ) as setup_executor:
-            logger.info("Preparing...")
+            logger.debug("Preparing...")
             setup_futures: list[Future[None]] = []
             for uploader in configuration.uploaders():
                 future = setup_executor.submit(uploader.prepare, **prepare_kwargs)
@@ -424,49 +442,51 @@ def main() -> None:
                 setup_futures.append(future)
             for future in setup_futures:
                 future.result()
-            logger.info("Done.")
+            logger.debug("Done.")
 
         # Start watchers
-        logger.info("Starting watchers...")
+        logger.debug("Starting watcher threads...")
         for watcher in configuration.watchers():
-            watcher.start()
-        logger.info("Done.")
+            if isinstance(watcher, ThreadWatcher):
+                watcher.start()
+        logger.debug("Done.")
 
-        try:
-            if os.name == "nt":
-                # Windows doesn't wait on this event correctly, so we have to do it ourselves
+        with ThreadPoolExecutor(
+            thread_name_prefix="AsyncRunner", max_workers=max_workers
+        ) as runner_executor:
+            loop.set_default_executor(runner_executor)
+            try:
+                logger.info("Running...")
                 while not shutdown_event.is_set():
-                    time.sleep(1)
-            else:
-                shutdown_event.wait()
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received, shutting down...")
-            shutdown_event.set()
+                    loop.run_forever()  # We do this for any libraries that need asyncio
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt received, shutting down...")
+                shutdown_event.set()
 
-        logger.info("Closing watchers...")
+        logger.debug("Closing watchers...")
         for watcher in configuration.watchers():
             watcher.close()
-        logger.info("Done.")
+        logger.debug("Done.")
 
     # Wait until after the executor shutdown is set to close the middlewares and uploaders as they may still be needed
 
-    logger.info("Closing middlewares...")
+    logger.debug("Closing middlewares...")
     for middleware in configuration.middlewares():
         middleware.close()
-    logger.info("Done.")
+    logger.debug("Done.")
 
-    logger.info("Closing uploaders...")
+    logger.debug("Closing uploaders...")
     for uploader in configuration.uploaders():
         uploader.close()
-    logger.info("Done.")
+    logger.debug("Done.")
 
-    logger.info("Closing MariaDB connection pool...")
+    logger.debug("Closing MariaDB connection pool...")
     pool.close()
-    logger.info("Done.")
+    logger.debug("Done.")
 
-    logger.info("Closing file manager...")
+    logger.debug("Closing file manager...")
     file_manager.close()
-    logger.info("Done.")
+    logger.debug("Done.")
 
     logger.info("Done. Exiting.")
 

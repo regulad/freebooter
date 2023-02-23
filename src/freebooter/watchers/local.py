@@ -23,13 +23,13 @@ from typing import Generator
 
 import ffmpeg
 
-from .common import Watcher
+from .common import ThreadWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 
 
-class LocalMediaLoader(Watcher):
+class LocalMediaLoader(ThreadWatcher):
     """
     Loads media from a directory on the local file system.
     """

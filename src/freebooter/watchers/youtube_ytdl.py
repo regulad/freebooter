@@ -22,7 +22,7 @@ from logging import getLogger
 from traceback import format_exc
 from typing import Generator
 
-from .common import YTDLWatcher
+from .common import YTDLThreadWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware
@@ -30,7 +30,7 @@ from ..middlewares import Middleware
 logger: Logger = getLogger(__name__)
 
 
-class YTDLYouTubeChannelWatcher(YTDLWatcher):
+class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
     """
     This class runs a thread that pulls YouTube vidoes
     """

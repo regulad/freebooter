@@ -32,7 +32,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 LABEL maintainer="Parker Wahle <regulad@regulad.xyz>" \
       name="freebooter" \
-      version="1.5.0"
+      version="1.6.0"
 
 # Add curl for MariaDB script
 RUN apt update && apt upgrade -y && apt install -y curl
@@ -41,7 +41,7 @@ RUN apt update && apt upgrade -y && apt install -y curl
 RUN curl -sSL https://downloads.mariadb.com/MariaDB/mariadb_repo_setup | bash
 
 # Add dependencies
-RUN apt update && apt upgrade -y && apt install -y libmariadb3 libmariadb-dev ffmpeg gcc wget fontconfig
+RUN apt update && apt upgrade -y && apt install -y libmariadb3 libmariadb-dev ffmpeg gcc wget fontconfig python3-dev g++
 
 # PhantomJS is only used a little by yt-dlp, so we will not install it. If we chose to in the future, it would go here.
 

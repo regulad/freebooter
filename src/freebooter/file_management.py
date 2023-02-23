@@ -117,8 +117,6 @@ class ScratchFile:
             if self._delete:
                 self._path.unlink(missing_ok=True)
 
-            assert self.closed, "File was not closed correctly!"
-
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 

@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+from asyncio import AbstractEventLoop
 from os import environ
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -32,7 +33,7 @@ from instaloader import (
 from mariadb import ConnectionPool
 from requests import Session
 
-from .common import Watcher, UploadCallback
+from .common import ThreadWatcher, UploadCallback
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
@@ -55,7 +56,7 @@ DEFAULT_INSTALOADER_SETUP_LOCK = Lock()
 DEFAULT_INSTALOADER_INITIALIZED = Event()
 
 
-class InstaloaderWatcher(Watcher):
+class InstaloaderWatcher(ThreadWatcher):
     SLEEP_TIME = 60 * 30  # 30 minutes
 
     def __init__(
@@ -116,9 +117,12 @@ class InstaloaderWatcher(Watcher):
         callback: UploadCallback,
         pool: ConnectionPool,
         file_manager: FileManager,
+        event_loop: AbstractEventLoop,
         **kwargs,
     ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager, **kwargs)
+        super().prepare(
+            shutdown_event, callback, pool, file_manager, event_loop, **kwargs
+        )
 
         assert self._file_manager is not None, "File manager was not set!"
 

@@ -27,13 +27,13 @@ from feedparser import FeedParserDict
 from requests import Session, Response
 from requests.adapters import HTTPAdapter
 
-from .common import YTDLWatcher
+from .common import YTDLThreadWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, Platform, MediaType
 from ..middlewares import Middleware
 
 
-class RSSWatcher(YTDLWatcher):
+class RSSWatcher(YTDLThreadWatcher):
     def __init__(
         self,
         name: str,

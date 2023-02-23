@@ -29,12 +29,15 @@ logger = getLogger(__name__)
 
 
 class Platform(Enum):
+    UNKNOWN = auto()
+
     OTHER = auto()
 
     YOUTUBE = auto()
     TIKTOK = auto()
     INSTAGRAM = auto()
     REDDIT = auto()
+    DISCORD = auto()
     TWITTER = auto()
 
     @classmethod
@@ -138,21 +141,22 @@ class MediaMetadata:
 
     def __init__(
         self,
+        *,
         media_id: str,
-        platform: Platform,
-        title: str | None,
-        description: str | None,
-        tags: list[str],
-        categories: list[str],
-        media_type: MediaType,
+        platform: Platform = Platform.UNKNOWN,
+        title: str | None = None,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        categories: list[str] | None = None,
+        media_type: MediaType = MediaType.UNKNOWN,
         data: dict[str, Any] | None = None,
     ) -> None:
         self._id = media_id
         self._platform = platform
         self._title = title
         self._description = description
-        self._tags = tags
-        self._categories = categories
+        self._tags: list[str] = tags or []
+        self._categories: list[str] = categories or []
         self._type = media_type
         self._data = data or {}
 
@@ -187,13 +191,13 @@ class MediaMetadata:
     @classmethod
     def from_ytdl_info(cls, info: dict[str, Any]) -> MediaMetadata:
         return cls(
-            info["id"],
-            Platform.from_url(info["webpage_url"]),
-            info.get("title"),
-            info.get("description"),
-            info.get("tags", []),
-            info.get("categories", []),
-            MediaType.VIDEO,  # how tf you get a photo with ytdl
+            media_id=info["id"],
+            platform=Platform.from_url(info["webpage_url"]),
+            title=info.get("title"),
+            description=info.get("description"),
+            tags=info.get("tags", []),
+            categories=info.get("categories", []),
+            media_type=MediaType.VIDEO,  # how tf you get a photo with ytdl
             data=info,
         )
 

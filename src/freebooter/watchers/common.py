@@ -17,7 +17,9 @@
 """
 from __future__ import annotations
 
+import asyncio
 from abc import ABCMeta
+from asyncio import AbstractEventLoop, Task
 from concurrent.futures import Future
 from logging import Logger
 from logging import getLogger
@@ -25,7 +27,7 @@ from os import sep
 from pathlib import Path
 from threading import Event
 from threading import Thread
-from typing import Callable
+from typing import Callable, Any
 from typing import TYPE_CHECKING, TypeAlias
 
 from mariadb import ConnectionPool, Connection, Cursor
@@ -52,13 +54,12 @@ else:
 logger: Logger = getLogger(__name__)
 
 
-class Watcher(Thread, metaclass=ABCMeta):
+class Watcher(metaclass=ABCMeta):
     """
-    This thread watches a channel on a streaming server for new videos and downloads them and then calls the return_call
+    This class is the base class for all watchers. It contains some common functionality that all watchers need.
     """
 
     MYSQL_TYPE: str | None = "VARCHAR(255)"
-    SLEEP_TIME: float = 60.0
 
     def __init__(
         self,
@@ -66,9 +67,8 @@ class Watcher(Thread, metaclass=ABCMeta):
         preprocessors: list[Middleware],
         **config,
     ) -> None:
-        super().__init__(
-            name=f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
-        )
+        if not hasattr(self, "name"):  # for subclasses that inherit from thread
+            self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 
         self._table_name = self.name
         self.preprocessors = preprocessors
@@ -77,17 +77,54 @@ class Watcher(Thread, metaclass=ABCMeta):
         self._callback: UploadCallback | None = None
         self._mariadb_pool: ConnectionPool | None = None
         self._file_manager: FileManager | None = None
+        self._loop: AbstractEventLoop | None = None
+
+        self._extra_kwargs: dict[str, Any] = config.copy()
+        self._extra_prep_kwargs: dict[str, Any] = {}
+
+    def close(self) -> None:
+        """
+        Closes the watcher. This may be a coroutine, but doesn't have to be.
+        """
+        assert self.ready, "Watcher is not ready!"
+
+        self.logger.debug(f"Closing {self.name}...")
+        for middleware in self.preprocessors:
+            middleware.close()
 
     @property
     def logger(self) -> Logger:
         return getLogger(self.name)
 
-    def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
-        """
-        Checks for new uploads and downloads them.
-        :return: A list of tuples of the downloaded file and the metadata for the upload
-        """
-        raise NotImplementedError
+    def prepare(
+        self,
+        shutdown_event: Event,
+        callback: UploadCallback,
+        pool: ConnectionPool,
+        file_manager: FileManager,
+        event_loop: AbstractEventLoop,
+        **kwargs,
+    ) -> None:
+        if self.ready:
+            self.logger.warning(
+                f"{self.name} is already ready! Prepare may have unintended consequences."
+            )
+
+        self.logger.debug(f"Preparing {self.name}...")
+
+        for middleware in self.preprocessors:
+            middleware.prepare(shutdown_event, file_manager, **kwargs)
+
+        self._shutdown_event = shutdown_event
+        self._callback = callback
+        self._mariadb_pool = pool
+        self._file_manager = file_manager
+        self._loop = event_loop
+
+        self._extra_prep_kwargs |= kwargs
+
+        if self.MYSQL_TYPE is not None:
+            self.make_tables()
 
     @property
     def ready(self) -> bool:
@@ -99,43 +136,7 @@ class Watcher(Thread, metaclass=ABCMeta):
             and all(middleware.ready for middleware in self.preprocessors)
         )
 
-    def prepare(
-        self,
-        shutdown_event: Event,
-        callback: UploadCallback,
-        pool: ConnectionPool,
-        file_manager: FileManager,
-        **kwargs,
-    ) -> None:
-        assert not self.ready, "Watcher is already ready!"
-
-        self.logger.debug(f"Preparing {self.name}...")
-
-        for middleware in self.preprocessors:
-            middleware.prepare(shutdown_event, file_manager, **kwargs)
-
-        self._shutdown_event = shutdown_event
-        self._callback = callback
-        self._mariadb_pool = pool
-        self._file_manager = file_manager
-
-        if self.MYSQL_TYPE is not None:
-            self.make_tables()
-
-        assert self.ready, "An error occurred while readying uploader!"
-
-    def close(self) -> None:
-        assert self.ready, "Watcher is not ready!"
-
-        self.logger.debug(f"Closing {self.name}...")
-
-        for middleware in self.preprocessors:
-            middleware.close()
-
-        if self._shutdown_event is not None and self._shutdown_event.is_set():
-            self.join()  # just wait for it to spin down
-
-    def mark_handled(self, id_: str, is_handled: bool = True) -> None:
+    def mark_handled(self, id_: Any, is_handled: bool = True) -> None:
         """
         Marks the given ID as handled in the database
         :param id_: The ID to mark as handled
@@ -155,7 +156,7 @@ class Watcher(Thread, metaclass=ABCMeta):
             connection.commit()
             self.logger.debug(f"Marked {id_} as handled: {is_handled}")
 
-    def is_handled(self, id_: str) -> bool:
+    def is_handled(self, id_: Any) -> bool:
         """
         Checks if the given ID is handled
         :param id_: The ID to check
@@ -180,7 +181,6 @@ class Watcher(Thread, metaclass=ABCMeta):
         A subclass may override this to make more tables or tables with a different schema.
         :return:
         """
-        assert self.ready, "Watcher is not ready!"
         assert self._mariadb_pool is not None, "Watcher is not ready!"
         with self._mariadb_pool.get_connection() as connection, connection.cursor() as cursor:  # type: Connection, Cursor
             cursor.execute(
@@ -197,7 +197,7 @@ class Watcher(Thread, metaclass=ABCMeta):
 
     def _preprocess_and_execute(
         self, downloaded: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> None:
+    ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         assert self._callback, "No callback set!"
 
         self.logger.debug(f"{self.name} is processing {len(downloaded)} output(s)")
@@ -224,7 +224,7 @@ class Watcher(Thread, metaclass=ABCMeta):
                         if not scratch_file.closed:
                             scratch_file.close()
             else:
-                self.logger.info(
+                self.logger.debug(
                     f"{self.name} upload callback finished, closing files..."
                 )
                 for scratch_file, _ in result:
@@ -235,7 +235,124 @@ class Watcher(Thread, metaclass=ABCMeta):
 
         fut.add_done_callback(cleanup)
 
-        self.logger.info(f"{self.name} passed on {len(downloaded)} output(s)")
+        self.logger.info(f"{self.name} passed on {len(downloaded)} output(s).")
+
+        return fut
+
+
+class AsyncioWatcher(Watcher):
+    """
+    A watcher that runs on the asyncio event loop.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        preprocessors: list[Middleware],
+        **config,
+    ) -> None:
+        super().__init__(name, preprocessors, **config)
+        self._prepare_task: Task | None = None
+        self._closing_task: Task | None = None
+
+    async def _a_preprocess_and_execute(
+        self, medias: list[tuple[ScratchFile, MediaMetadata]]
+    ) -> list[MediaMetadata]:
+        """
+        A coroutine that preprocesses and executes the given medias.
+        :param medias: The medias to preprocess and execute
+        :return: A future that resolves to the processed medias
+        """
+        assert self._loop is not None, "No event loop set!"
+
+        asyncio_future_concurrent_future = self._loop.run_in_executor(
+            None, self._preprocess_and_execute, medias
+        )
+        concurrent_future = await asyncio_future_concurrent_future
+        asyncio_future = asyncio.wrap_future(concurrent_future, loop=self._loop)
+
+        list_of_medias = await asyncio_future
+
+        return [media for _, media in list_of_medias if media is not None]
+
+    async def async_prepare(self) -> None:
+        """
+        An async method that is called when the watcher is prepared.
+        This will be called when the entire program is ready to go and the event loop is running.
+        """
+        self.logger.debug(f"Preparing {self.name} asynchronously...")
+
+    async def aclose(self) -> None:
+        """
+        Closes the watcher asynchronously.
+        """
+        self.logger.debug(f"Closing {self.name} asynchronously...")
+
+    def close(self) -> None:
+        """
+        Closes the watcher.
+        """
+        super().close()
+        if self._loop is not None:
+            if self._loop.is_running():
+                self._closing_task = self._loop.create_task(self.aclose())
+            else:
+                self._loop.run_until_complete(self.aclose())
+
+    @property
+    def ready(self) -> bool:
+        return (
+            super().ready
+            and self._prepare_task is not None
+            and self._prepare_task.done()
+        )
+
+    def prepare(
+        self,
+        shutdown_event: Event,
+        callback: UploadCallback,
+        pool: ConnectionPool,
+        file_manager: FileManager,
+        event_loop: AbstractEventLoop,
+        **kwargs,
+    ) -> None:
+        super().prepare(
+            shutdown_event, callback, pool, file_manager, event_loop, **kwargs
+        )
+
+        self._prepare_task = event_loop.create_task(self.async_prepare())
+
+
+class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I know thread clobbers the name
+    """
+    This thread watches a channel on a streaming server for new videos and downloads them and then calls the return_call
+    """
+
+    SLEEP_TIME: float = 60.0
+
+    def __init__(
+        self,
+        name: str,
+        preprocessors: list[Middleware],
+        **config,
+    ) -> None:
+        self._name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
+
+        Thread.__init__(self, name=self._name)
+        Watcher.__init__(self, self.name, preprocessors, **config)
+
+    def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
+        """
+        Checks for new uploads and downloads them.
+        :return: A list of tuples of the downloaded file and the metadata for the upload
+        """
+        raise NotImplementedError
+
+    def close(self) -> None:
+        super().close()
+
+        if self._shutdown_event is not None and self._shutdown_event.is_set():
+            self.join()  # just wait for it to spin down
 
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"
@@ -260,7 +377,7 @@ class Watcher(Thread, metaclass=ABCMeta):
             self._shutdown_event.wait(self.SLEEP_TIME)
 
 
-class YTDLWatcher(Watcher, metaclass=ABCMeta):
+class YTDLThreadWatcher(ThreadWatcher, metaclass=ABCMeta):
     """
     This watcher uses youtube-dl to download videos from a channel.
     """
@@ -318,9 +435,12 @@ class YTDLWatcher(Watcher, metaclass=ABCMeta):
         callback: UploadCallback,
         pool: ConnectionPool,
         file_manager: FileManager,
+        event_loop: AbstractEventLoop,
         **kwargs,
     ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager, **kwargs)
+        super().prepare(
+            shutdown_event, callback, pool, file_manager, event_loop, **kwargs
+        )
 
         assert self._downloader is None, "Downloader already initialized"
         assert self._file_manager is not None, "File manager not initialized"
@@ -332,4 +452,10 @@ class YTDLWatcher(Watcher, metaclass=ABCMeta):
         self._downloader = YoutubeDL(self._ytdl_params)
 
 
-__all__ = ("Watcher", "UploadCallback", "YTDLWatcher")
+__all__ = (
+    "Watcher",
+    "AsyncioWatcher",
+    "ThreadWatcher",
+    "UploadCallback",
+    "YTDLThreadWatcher",
+)

@@ -67,7 +67,12 @@ class LocalMediaStorage(Uploader):
 
             copyfile(file.path, potential_path)
             self.logger.debug(f"Saved {file.path.name} to {self._directory}")
-            metadatas.append((file, metadata))
+
+            ret_metadata = MediaMetadata(
+                media_id=str(potential_path.resolve()),
+            )
+
+            metadatas.append((file, ret_metadata))
             # a generator would be better here but due to the nasty thready nature of the program, it's not possible to
         return metadatas
 

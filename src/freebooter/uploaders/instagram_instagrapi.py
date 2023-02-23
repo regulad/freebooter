@@ -23,6 +23,7 @@ import random
 import re
 import time
 import typing
+from logging import getLogger, INFO, WARNING
 from pathlib import Path
 from threading import Lock, Event
 from typing import Any, Literal
@@ -51,6 +52,8 @@ from .._assets import ASSETS
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
+
+getLogger("private_request").setLevel(INFO if __debug__ else WARNING)
 
 
 class InstagrapiUploader(Uploader):

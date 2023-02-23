@@ -18,6 +18,8 @@
 from __future__ import annotations
 
 from .common import *
+from .discord_dpy import *
+from .discord_selfcord import *
 from .instagram_instaloader import *
 from .local import *
 from .pusher import *

@@ -17,13 +17,13 @@
 """
 from __future__ import annotations
 
-from .common import Watcher
+from .common import ThreadWatcher
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware
 
 
-class Pusher(Watcher):
+class Pusher(ThreadWatcher):
     """
     Periodically pushes empty media into the uploading flow. This is useful if you have a collector for counting the
     number of posts, while also having an uploader that has a rate limit to follow.
