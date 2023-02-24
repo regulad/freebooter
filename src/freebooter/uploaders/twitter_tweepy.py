@@ -17,8 +17,10 @@
 """
 from __future__ import annotations
 
+import time
 from typing import Any, Generator
 
+import ffmpeg
 from PIL import Image
 from tweepy import OAuth1UserHandler, API
 from tweepy.models import Media, Status
@@ -140,13 +142,32 @@ class TweepyTwitterUploader(Uploader):
                 # Videos are fine too, but we need to use the media_category=tweet_video parameter.
                 # Tweepy also has a bug with wait_for_async_finalize=True, so we need to set it to False.
                 elif metadata.type is MediaType.VIDEO:
-                    kwargs_copy = self._tweepy_upload_kwargs.copy()
-                    kwargs_copy["wait_for_async_finalize"] = False
-                    # This is broken in tweepy. It generates a KeyError if wait_for_async_finalize is not set to False.
-                    twitter_media = self._api.media_upload(
-                        str(file.path), media_category="tweet_video", **kwargs_copy
-                    )
-                # If it isn't a photo or video, what do we do with it?
+                    with self._file_manager.get_file(
+                        file_extension=".mp4"
+                    ) as mp4_scratch:
+                        # We need to convert the video to MP4 with ffmpeg.
+                        # Even if it is an MP4, we may need to re-encode it to make it support twitter.
+                        # We also need to set the video to 720p, as twitter doesn't support higher resolutions
+                        (
+                            ffmpeg.input(str(file.path.resolve()))
+                            .filter("scale", height="720")
+                            .output(str(mp4_scratch.path.resolve()))
+                            .run()
+                        )
+
+                        # Send it!!
+                        kwargs_copy = self._tweepy_upload_kwargs.copy()
+                        kwargs_copy["wait_for_async_finalize"] = False
+                        # This is broken in tweepy. It generates a KeyError if wait_for_async_finalize is not set to
+                        # False.
+                        twitter_media = self._api.media_upload(
+                            str(mp4_scratch.path),
+                            media_category="tweet_video",
+                            **kwargs_copy,
+                        )
+                        time.sleep(20)  # probably how long it takes?
+                        # since the wait_for_async_finalize is broken, we need to wait for the video to upload
+                # If it isn't a photo or video, what do we do with it?: we raise an error.
                 else:
                     raise ValueError(f"Unknown media type: {metadata.type}")
 

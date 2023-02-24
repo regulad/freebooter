@@ -25,7 +25,13 @@ import jsonschema
 from . import SelfcordWatcher
 from ._assets import ASSETS
 from .config import Configuration
-from .middlewares import Middleware, MetadataModifier, MediaCollector, Dropper
+from .middlewares import (
+    Middleware,
+    MetadataModifier,
+    MediaCollector,
+    Dropper,
+    Limiter,
+)
 from .uploaders import (
     Uploader,
     InstagrapiUploader,
@@ -63,6 +69,7 @@ MIDDLEWARES: Mapping[str, Type[Middleware]] = FrozenDict(
         "metadata": MetadataModifier,
         "collector": MediaCollector,
         "dropper": Dropper,
+        "limiter": Limiter,
     }
 )
 
@@ -94,19 +101,31 @@ class LegacyYamlConfiguration(Configuration):
     """
     A concrete implementation of the Configuration interface.
     """
-    watcher_cache: dict[str, Watcher] = {}
-    uploader_cache: dict[str, Uploader] = {}
-    middleware_cache: dict[str, Middleware] = {}
+    watcher_map: dict[str, Type[Watcher]]
+    uploader_map: dict[str, Type[Uploader]]
+    middleware_map: dict[str, Type[Middleware]]
+
+    watcher_cache: dict[str, Watcher]
+    uploader_cache: dict[str, Uploader]
+    middleware_cache: dict[str, Middleware]
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__()
         self._config = config
         check_config(config)
 
+        self.watcher_map = dict(WATCHERS)
+        self.uploader_map = dict(UPLOADERS)
+        self.middleware_map = dict(MIDDLEWARES)
+
+        self.watcher_cache = {}
+        self.uploader_cache = {}
+        self.middleware_cache = {}
+
     def _middleware_of(
         self, middleware_data: dict[str, Any], *, prepend_name: str = ""
     ) -> Middleware:
-        middleware_cls: Type[Middleware] = MIDDLEWARES[middleware_data["type"]]
+        middleware_cls: Type[Middleware] = self.middleware_map[middleware_data["type"]]
 
         if prepend_name:
             name = prepend_name + "-" + middleware_data["name"]
@@ -116,10 +135,14 @@ class LegacyYamlConfiguration(Configuration):
         if name in self.middleware_cache:
             return self.middleware_cache[name]
 
-        return middleware_cls(name, **middleware_data["config"])
+        middleware = middleware_cls(name, **middleware_data["config"])
+
+        self.middleware_cache[name] = middleware
+
+        return middleware
 
     def _uploader_of(self, uploader_data: dict[str, Any]) -> Uploader:
-        uploader_cls: Type[Uploader] = UPLOADERS[uploader_data["type"]]
+        uploader_cls: Type[Uploader] = self.uploader_map[uploader_data["type"]]
 
         name = uploader_data["name"]
 
@@ -138,7 +161,7 @@ class LegacyYamlConfiguration(Configuration):
         return uploader
 
     def _watcher_of(self, watcher_data: dict[str, Any]) -> Watcher:
-        watcher_cls: Type[Watcher] = WATCHERS[watcher_data["type"]]
+        watcher_cls: Type[Watcher] = self.watcher_map[watcher_data["type"]]
 
         name = watcher_data["name"]
 

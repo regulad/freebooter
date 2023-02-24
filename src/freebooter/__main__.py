@@ -242,7 +242,7 @@ def main() -> None:
             dislog_url,
             level=INFO,  # debug is just too much for discord to handle
             text_send_on_error=dislog_message,
-            run_async=True,
+            run_async=False,  # can't do async with the current nature of the program with sync code still used
         )
         getLogger().addHandler(handler)
 
@@ -279,7 +279,7 @@ def main() -> None:
     logger.debug("Loading configuration...")
     configuration: Configuration
     if "FREEBOOTER_CONFIG_FILE" in environ:
-        config_location = environ.get("FREEBOOTER_CONFIG_FILE", "./config/config.yml")
+        config_location = environ["FREEBOOTER_CONFIG_FILE"]
         config_path = Path(config_location)
 
         if not config_path.is_absolute():
@@ -302,7 +302,7 @@ def main() -> None:
         configuration = LegacyYamlConfiguration(config_data)
     else:
         logger.error("No configuration file provided.")
-        sys.exit()
+        sys.exit(1)
 
     # Now we start opening connections and running our code:
 

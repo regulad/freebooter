@@ -129,7 +129,7 @@ class DiscordPyWatcher(AsyncioWatcher):
         return await self._a_preprocess_and_execute(medias)
 
     async def on_message(self, message: Message) -> list[MediaMetadata]:
-        if message.channel.id in self._channels:
+        if message.channel.id in self._channels and message.attachments:
             self.logger.debug(
                 f"Received message from {message.author} in {message.channel}."
             )
@@ -157,9 +157,10 @@ class DiscordPyWatcher(AsyncioWatcher):
                 async for message in channel.history(
                     limit=self._backtrack, oldest_first=True
                 ):
-                    await self.process_message(
-                        message, handle_if_already_handled=self._copy
-                    )
+                    if message.attachments:
+                        await self.process_message(
+                            message, handle_if_already_handled=self._copy
+                        )
 
         if self._copy:
             self._copy = False

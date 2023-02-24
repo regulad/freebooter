@@ -54,14 +54,6 @@ class MediaCollector(Middleware):
             self.logger.debug(f"Releasing media {got_media[1].id} ON CLOSE.")
             got_media[0].close()
 
-    def _process(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> tuple[ScratchFile, MediaMetadata] | None:
-        """
-        Collects the media and releases it when enough have been collected. no-op.
-        """
-        return file, metadata  # no-op
-
     def process_many(
         self, media: list[tuple[ScratchFile, MediaMetadata]]
     ) -> list[tuple[ScratchFile, MediaMetadata]]:

@@ -143,7 +143,7 @@ class FileManager:
         for file in self._files.copy():  # changes in size
             file.close()
         for file in self.directory.iterdir():
-            logger.warning(
+            logger.debug(
                 f"Deleting file {file} because it was not deleted automatically!"
             )
             file.unlink()

@@ -32,8 +32,6 @@ class Uploader(metaclass=ABCMeta):
     They are a thread to allow the execution of background tasks.
     """
 
-    BACKGROUND_TASK_INTERVAL_SECONDS: float = 1.0
-
     def __init__(self, name: str, preprocessors: list[Middleware], **config) -> None:
         self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 

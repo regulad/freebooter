@@ -30,7 +30,7 @@ from urllib3 import Retry
 
 from .common import Uploader
 from ..file_management import ScratchFile
-from ..metadata import MediaMetadata, Platform
+from ..metadata import MediaMetadata, Platform, MediaType
 from ..middlewares import Middleware
 
 
@@ -103,7 +103,8 @@ class DiscordWebhookUploader(Uploader):
                         .set_image(url="attachment://" + file.path.name)
                         .set_footer(text=f"From {metadata.platform.name.title()}")
                     )
-                    if metadata.title or metadata.description
+                    if (metadata.title or metadata.description)
+                    and metadata.type is MediaType.PHOTO  # embeds only work wiht photos
                     else None
                 )
 

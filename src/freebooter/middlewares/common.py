@@ -31,8 +31,6 @@ class Middleware(metaclass=ABCMeta):
     The process method may be called concurrently, so it must be thread-safe.
     """
 
-    BACKGROUND_TASK_INTERVAL_SECONDS = 60
-
     def __init__(self, name: str, **config) -> None:
         self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 
@@ -74,7 +72,7 @@ class Middleware(metaclass=ABCMeta):
         Processes some media.
         This is not guaranteed to be called on the same thread as the Middleware itself, and probably will not be.
         """
-        raise NotImplementedError
+        return file, metadata
 
     def process_one(
         self, file: ScratchFile, metadata: MediaMetadata
