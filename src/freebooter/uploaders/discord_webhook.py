@@ -53,7 +53,7 @@ class DiscordWebhookUploader(Uploader):
         """
         :param name: The name of the uploader.
         :param preprocessors: A list of middlewares to run before uploading.
-        :param webhook_url: The URL of the webhook to upload to.
+        :param webhook: The URL of the webhook to upload to.
         :param bot_token: The bot token to use for the webhook. Optional.
         :param proxies: A dictionary of proxies to use for the webhook. Optional.
         :param retry_count: The number of times to retry the upload. Defaults to 3.
