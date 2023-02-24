@@ -51,11 +51,7 @@ class Configuration(metaclass=ABCMeta):
         """
         Returns the global configuration.
         """
-        return (
-            int(environ["FREEBOOTER_TOR_PROXY_PORT"])
-            if "FREEBOOTER_TOR_PROXY_PORT" in environ
-            else None
-        )
+        return int(environ["FREEBOOTER_TOR_PROXY_PORT"]) if "FREEBOOTER_TOR_PROXY_PORT" in environ else None
 
     @staticmethod
     def global_tor_control_port(cls) -> int | None:

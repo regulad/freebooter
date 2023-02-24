@@ -53,9 +53,7 @@ class Middleware(metaclass=ABCMeta):
         """
         self.logger.debug(f"Closing middleware {self.name}.")
 
-    def prepare(
-        self, shutdown_event: Event, file_manager: FileManager, **kwargs
-    ) -> None:
+    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
         assert not self.ready, "Middleware is already ready."
 
         self.logger.debug(f"Preparing middleware {self.name}...")
@@ -66,29 +64,27 @@ class Middleware(metaclass=ABCMeta):
         assert self.ready, "Middleware failed to prepare."
 
     def _process(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> tuple[ScratchFile, MediaMetadata] | None:
+        self, file: ScratchFile, metadata: MediaMetadata | None
+    ) -> tuple[ScratchFile, MediaMetadata | None] | None:
         """
         Processes some media.
         This is not guaranteed to be called on the same thread as the Middleware itself, and probably will not be.
+        If a none metadata is returned, that means that the middleware did not close the file and end its lifecycle but
+        instead excepts the file to be closed by the caller.
         """
         return file, metadata
 
     def process_one(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> tuple[ScratchFile, MediaMetadata] | None:
+        self, file: ScratchFile, metadata: MediaMetadata | None
+    ) -> tuple[ScratchFile, MediaMetadata | None] | None:
         assert self.ready, "Middleware is not ready."
         return self._process(file, metadata)
 
     def process_many(
-        self, media: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> list[tuple[ScratchFile, MediaMetadata]]:
+        self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
+    ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         assert self.ready, "Middleware is not ready."
-        return [
-            pair
-            for pair in [self.process_one(file, metadata) for file, metadata in media]
-            if pair is not None
-        ]
+        return [pair for pair in [self.process_one(file, metadata) for file, metadata in medias] if pair is not None]
 
 
 __all__ = ("Middleware",)

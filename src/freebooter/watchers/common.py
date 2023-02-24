@@ -27,7 +27,7 @@ from os import sep
 from pathlib import Path
 from threading import Event
 from threading import Thread
-from typing import Callable, Any
+from typing import Callable, Any, cast
 from typing import TYPE_CHECKING, TypeAlias
 
 from mariadb import ConnectionPool, Connection, Cursor
@@ -40,7 +40,7 @@ from ..middlewares import Middleware
 
 if TYPE_CHECKING:
     UploadCallback: TypeAlias = Callable[
-        [list[tuple[ScratchFile, MediaMetadata]]],
+        [list[tuple[ScratchFile, MediaMetadata | None]]],
         Future[list[tuple[ScratchFile, MediaMetadata | None]]],
     ]
     # This is the type of the callback that is called when a watcher finds new media. You plug in the list of tuples
@@ -88,7 +88,7 @@ class Watcher(metaclass=ABCMeta):
         """
         assert self.ready, "Watcher is not ready!"
 
-        self.logger.debug(f"Closing {self.name}...")
+        self.logger.debug(f"Closing watcher {self.name}...")
         for middleware in self.preprocessors:
             middleware.close()
 
@@ -106,9 +106,7 @@ class Watcher(metaclass=ABCMeta):
         **kwargs,
     ) -> None:
         if self.ready:
-            self.logger.warning(
-                f"{self.name} is already ready! Prepare may have unintended consequences."
-            )
+            self.logger.warning(f"{self.name} is already ready! Prepare may have unintended consequences.")
 
         self.logger.debug(f"Preparing {self.name}...")
 
@@ -200,42 +198,43 @@ class Watcher(metaclass=ABCMeta):
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         assert self._callback, "No callback set!"
 
-        self.logger.debug(f"{self.name} is processing {len(downloaded)} output(s)")
+        self.logger.debug(f"Preprocessing {len(downloaded)} files...")
 
+        preprocessed: list[tuple[ScratchFile, MediaMetadata | None]] = cast(
+            "list[tuple[ScratchFile, MediaMetadata | None]]",
+            # mypy doesn't get the hint of casting a non-optional to an optional, so we have to do this.
+            downloaded.copy(),
+        )
         for preprocessor in self.preprocessors:
-            downloaded = preprocessor.process_many(downloaded)
+            preprocessed = preprocessor.process_many(preprocessed)
 
         # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
         # code is concurrent
-        def cleanup(
-            done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]
-        ) -> None:
+        def cleanup(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
             try:
                 result = done_future.result(timeout=0)
             except TimeoutError:
                 result = None
 
             if result is None:
-                self.logger.error(
-                    f"{self.name} upload callback failed! Closing files and exiting..."
-                )
+                self.logger.error(f"{self.name} upload callback failed! Closing files and exiting...")
                 if downloaded is not None:
                     for scratch_file, _ in downloaded:
                         if not scratch_file.closed:
+                            self.logger.debug(f"Closing {scratch_file}...")
                             scratch_file.close()
             else:
-                self.logger.debug(
-                    f"{self.name} upload callback finished, closing files..."
-                )
+                self.logger.debug(f"{self.name} upload callback finished, closing files...")
                 for scratch_file, _ in result:
                     if not scratch_file.closed:
+                        self.logger.debug(f"Closing {scratch_file}...")
                         scratch_file.close()
 
-        fut = self._callback(downloaded)
+        self.logger.debug(f"Calling back with {len(preprocessed)} medias... ")
+
+        fut = self._callback(preprocessed)
 
         fut.add_done_callback(cleanup)
-
-        self.logger.info(f"{self.name} passed on {len(downloaded)} output(s).")
 
         return fut
 
@@ -255,9 +254,7 @@ class AsyncioWatcher(Watcher):
         self._prepare_task: Task | None = None
         self._closing_task: Task | None = None
 
-    async def _a_preprocess_and_execute(
-        self, medias: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> list[MediaMetadata]:
+    async def _a_preprocess_and_execute(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
         """
         A coroutine that preprocesses and executes the given medias.
         :param medias: The medias to preprocess and execute
@@ -265,9 +262,7 @@ class AsyncioWatcher(Watcher):
         """
         assert self._loop is not None, "No event loop set!"
 
-        asyncio_future_concurrent_future = self._loop.run_in_executor(
-            None, self._preprocess_and_execute, medias
-        )
+        asyncio_future_concurrent_future = self._loop.run_in_executor(None, self._preprocess_and_execute, medias)
         concurrent_future = await asyncio_future_concurrent_future
         asyncio_future = asyncio.wrap_future(concurrent_future, loop=self._loop)
 
@@ -280,13 +275,13 @@ class AsyncioWatcher(Watcher):
         An async method that is called when the watcher is prepared.
         This will be called when the entire program is ready to go and the event loop is running.
         """
-        self.logger.debug(f"Preparing {self.name} asynchronously...")
+        self.logger.debug(f"Preparing watcher {self.name} asynchronously...")
 
     async def aclose(self) -> None:
         """
         Closes the watcher asynchronously.
         """
-        self.logger.debug(f"Closing {self.name} asynchronously...")
+        self.logger.debug(f"Closing watcher {self.name} asynchronously...")
 
     def close(self) -> None:
         """
@@ -295,17 +290,18 @@ class AsyncioWatcher(Watcher):
         super().close()
         if self._loop is not None:
             if self._loop.is_running():
-                self._closing_task = self._loop.create_task(self.aclose())
+                if asyncio.get_event_loop() is not self._loop:
+                    # We are on a different thread, so we need to schedule the close
+                    self._loop.call_soon_threadsafe(self._loop.create_task, self.aclose())
+                else:
+                    # We are on the same thread, so we can just schedule the close
+                    self._closing_task = self._loop.create_task(self.aclose())
             else:
                 self._loop.run_until_complete(self.aclose())
 
     @property
     def ready(self) -> bool:
-        return (
-            super().ready
-            and self._prepare_task is not None
-            and self._prepare_task.done()
-        )
+        return super().ready and self._prepare_task is not None and self._prepare_task.done()
 
     def prepare(
         self,
@@ -316,9 +312,7 @@ class AsyncioWatcher(Watcher):
         event_loop: AbstractEventLoop,
         **kwargs,
     ) -> None:
-        super().prepare(
-            shutdown_event, callback, pool, file_manager, event_loop, **kwargs
-        )
+        super().prepare(shutdown_event, callback, pool, file_manager, event_loop, **kwargs)
 
         self._prepare_task = event_loop.create_task(self.async_prepare())
 
@@ -356,15 +350,11 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
 
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"
-        assert (
-            self._shutdown_event is not None
-        ), "Watcher is not ready, cannot run thread!"
+        assert self._shutdown_event is not None, "Watcher is not ready, cannot run thread!"
         assert self._callback is not None, "Watcher is not ready, cannot run thread!"
 
         while not self._shutdown_event.is_set():
-            self.logger.debug(
-                f"{self.name}, a {self.__class__.__name__}, is running a check cycle..."
-            )
+            self.logger.debug(f"{self.name}, a {self.__class__.__name__}, is running a check cycle...")
 
             try:
                 downloaded = self.check_for_uploads()
@@ -372,7 +362,10 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
                 self.logger.exception(f"Error checking for new uploads: {e}")
                 downloaded = []
 
-            self._preprocess_and_execute(downloaded)
+            if downloaded:
+                self.logger.info(f"{self.name} found {len(downloaded)} new uploads, passing them on...")
+
+                self._preprocess_and_execute(downloaded)
 
             self._shutdown_event.wait(self.SLEEP_TIME)
 
@@ -438,16 +431,12 @@ class YTDLThreadWatcher(ThreadWatcher, metaclass=ABCMeta):
         event_loop: AbstractEventLoop,
         **kwargs,
     ) -> None:
-        super().prepare(
-            shutdown_event, callback, pool, file_manager, event_loop, **kwargs
-        )
+        super().prepare(shutdown_event, callback, pool, file_manager, event_loop, **kwargs)
 
         assert self._downloader is None, "Downloader already initialized"
         assert self._file_manager is not None, "File manager not initialized"
 
-        self._ytdl_params.setdefault(
-            "outtmpl", f"{self._file_manager.directory}{sep}%(id)s.%(ext)s"
-        )
+        self._ytdl_params.setdefault("outtmpl", f"{self._file_manager.directory}{sep}%(id)s.%(ext)s")
 
         self._downloader = YoutubeDL(self._ytdl_params)
 

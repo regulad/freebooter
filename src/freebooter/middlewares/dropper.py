@@ -38,8 +38,10 @@ class Dropper(Middleware):
         self._chance = chance
 
     def _process(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> tuple[ScratchFile, MediaMetadata] | None:
+        self, file: ScratchFile, metadata: MediaMetadata | None
+    ) -> tuple[ScratchFile, MediaMetadata | None] | None:
+        if metadata is None:
+            return file, metadata
         if random.random() < self._chance:
             self.logger.debug(f"Dropping {metadata.title} @ {file.path}")
             if not file.closed:

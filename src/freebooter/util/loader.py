@@ -35,9 +35,7 @@ class Loader(yaml.SafeLoader):
 def construct_include(loader: Loader, node: yaml.Node) -> Any:
     """Include file referenced at node."""
 
-    filename = os.path.abspath(
-        os.path.join(loader._root, loader.construct_scalar(node))  # type: ignore
-    )
+    filename = os.path.abspath(os.path.join(loader._root, loader.construct_scalar(node)))  # type: ignore
     extension = os.path.splitext(filename)[1].lstrip(".")
 
     with open(filename, "r") as f:

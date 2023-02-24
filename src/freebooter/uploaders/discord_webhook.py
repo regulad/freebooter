@@ -75,9 +75,7 @@ class DiscordWebhookUploader(Uploader):
         if proxies is not None:
             self._session.proxies |= proxies
 
-        self._webhook = SyncWebhook.from_url(
-            self._webhook_url, session=self._session, bot_token=self._token
-        )
+        self._webhook = SyncWebhook.from_url(self._webhook_url, session=self._session, bot_token=self._token)
 
     def upload_generator(
         self, medias: list[tuple[ScratchFile, MediaMetadata]]
@@ -119,9 +117,7 @@ class DiscordWebhookUploader(Uploader):
                     sync_webhook_message, SyncWebhookMessage
                 ), "SyncWebhookMessage is not a SyncWebhookMessage"
 
-                ret_metadata = MediaMetadata(
-                    media_id=str(sync_webhook_message.id), platform=Platform.DISCORD
-                )
+                ret_metadata = MediaMetadata(media_id=str(sync_webhook_message.id), platform=Platform.DISCORD)
 
             yield file, ret_metadata
 

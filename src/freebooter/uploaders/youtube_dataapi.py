@@ -135,11 +135,11 @@ class YouTubeDataAPIV3Uploader(Uploader):
         video_categories_resource: YouTubeResource.VideoCategoriesResource = (
             self._youtube_dev_key_resource.videoCategories()
         )
-        video_categories_http_request: VideoCategoryListResponseHttpRequest = (
-            video_categories_resource.list(regionCode="US", part="snippet")
+        video_categories_http_request: VideoCategoryListResponseHttpRequest = video_categories_resource.list(
+            regionCode="US", part="snippet"
         )
-        video_category_list_response: VideoCategoryListResponse = (
-            video_categories_http_request.execute(num_retries=MAX_RETRIES)
+        video_category_list_response: VideoCategoryListResponse = video_categories_http_request.execute(
+            num_retries=MAX_RETRIES
         )
         category_list: list[VideoCategory] = video_category_list_response["items"]
 
@@ -155,8 +155,7 @@ class YouTubeDataAPIV3Uploader(Uploader):
                 continue  # we can't assign it, so we might as well skip it
 
         close_matches: list[int] = [
-            safe_categories[str(match)]
-            for match in get_close_matches(category_name, safe_categories.keys())
+            safe_categories[str(match)] for match in get_close_matches(category_name, safe_categories.keys())
         ]
 
         if len(close_matches) == 0:
@@ -168,11 +167,11 @@ class YouTubeDataAPIV3Uploader(Uploader):
         video_categories_resource: YouTubeResource.VideoCategoriesResource = (
             self._youtube_dev_key_resource.videoCategories()
         )
-        video_categories_http_request: VideoCategoryListResponseHttpRequest = (
-            video_categories_resource.list(regionCode="US", part="snippet")
+        video_categories_http_request: VideoCategoryListResponseHttpRequest = video_categories_resource.list(
+            regionCode="US", part="snippet"
         )
-        video_category_list_response: VideoCategoryListResponse = (
-            video_categories_http_request.execute(num_retries=MAX_RETRIES)
+        video_category_list_response: VideoCategoryListResponse = video_categories_http_request.execute(
+            num_retries=MAX_RETRIES
         )
         category_list: list[VideoCategory] = video_category_list_response["items"]
 
@@ -205,34 +204,22 @@ class YouTubeDataAPIV3Uploader(Uploader):
             },
         }
 
-        assert (
-            body["status"]["privacyStatus"] in VALID_PRIVACY_STATUSES
-        ), "Invalid privacy status."  # future use
+        assert body["status"]["privacyStatus"] in VALID_PRIVACY_STATUSES, "Invalid privacy status."  # future use
 
         return body
 
     @typing.no_type_check  # mypy gets the list comp VERY wrong
-    def upload(
-        self, medias: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> list[tuple[ScratchFile, MediaMetadata]]:
+    def upload(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[tuple[ScratchFile, MediaMetadata]]:
         return [
             uploaded
-            for uploaded in [
-                (file, self._upload_one(file, metadata)) for file, metadata in medias
-            ]
+            for uploaded in [(file, self._upload_one(file, metadata)) for file, metadata in medias]
             if uploaded[1] is not None
         ]
 
-    def _upload_one(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> MediaMetadata | None:
-        media_file_upload: MediaFileUpload = MediaFileUpload(
-            str(file.path), chunksize=-1, resumable=True
-        )
+    def _upload_one(self, file: ScratchFile, metadata: MediaMetadata) -> MediaMetadata | None:
+        media_file_upload: MediaFileUpload = MediaFileUpload(str(file.path), chunksize=-1, resumable=True)
         try:
-            videos_resource: YouTubeResource.VideosResource = (
-                self._youtube_oauth_resource.videos()
-            )
+            videos_resource: YouTubeResource.VideosResource = self._youtube_oauth_resource.videos()
 
             body: Video = self._build_body(metadata)
 
@@ -240,18 +227,14 @@ class YouTubeDataAPIV3Uploader(Uploader):
                 part=",".join(body.keys()), body=body, media_body=media_file_upload
             )
 
-            status, response = insert_request.next_chunk(
-                num_retries=MAX_RETRIES
-            )  # type: None, Video
+            status, response = insert_request.next_chunk(num_retries=MAX_RETRIES)  # type: None, Video
 
             logger.info(
                 f"Successfully uploaded a YouTube video with ID {response['id']} "
                 f"from a source video with ID {metadata.id}."
             )
 
-            category_name = self._get_category_name_by_id(
-                int(response["snippet"].get("categoryId", "22"))
-            )
+            category_name = self._get_category_name_by_id(int(response["snippet"].get("categoryId", "22")))
 
             return MediaMetadata(
                 media_id=response["id"],
@@ -264,9 +247,7 @@ class YouTubeDataAPIV3Uploader(Uploader):
                 media_type=MediaType.VIDEO,
             )
         except HttpError as http_error:
-            logger.error(
-                f"An HTTP error {http_error.resp.status} occurred:\n{http_error.content}"
-            )
+            logger.error(f"An HTTP error {http_error.resp.status} occurred:\n{http_error.content}")
             logger.exception(format_exc())
             return None
         finally:

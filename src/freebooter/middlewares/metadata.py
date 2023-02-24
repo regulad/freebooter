@@ -115,8 +115,11 @@ class MetadataModifier(Middleware):
         )
 
     def _process(
-        self, file: ScratchFile, metadata: MediaMetadata
-    ) -> tuple[ScratchFile, MediaMetadata] | None:
+        self, file: ScratchFile, metadata: MediaMetadata | None
+    ) -> tuple[ScratchFile, MediaMetadata | None] | None:
+        if metadata is None:
+            return file, metadata
+
         media_id: str = metadata.id
         platform: Platform = metadata.platform
         title: str | None = metadata.title

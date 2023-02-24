@@ -17,27 +17,32 @@
 """
 from __future__ import annotations
 
-from .common import ThreadWatcher
+import random
+
+from .common import Middleware
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
-from ..middlewares import Middleware
 
 
-class Pusher(ThreadWatcher):
+class Ignorer(Middleware):
     """
-    Periodically pushes empty media into the uploading flow. This is useful if you have a collector for counting the
-    number of posts, while also having an uploader that has a rate limit to follow.
+    Ignores a random percentage of inputted pieces of media.
     """
 
-    MYSQL_TYPE = None
+    def __init__(self, name: str, *, chance: float = 0.2, **config) -> None:
+        """
+        :param chance: The chance that a piece of media will be ignored. This is a percentage, 0-1.
+        """
+        super().__init__(name, **config)
 
-    def __init__(self, name: str, preprocessors: list[Middleware], *, interval: int, **config) -> None:
-        super().__init__(name, preprocessors, **config)
+        self._chance = chance
 
-        self.SLEEP_TIME = interval
-
-    def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
-        return []
-
-
-__all__ = ("Pusher",)
+    def _process(
+        self, file: ScratchFile, metadata: MediaMetadata | None
+    ) -> tuple[ScratchFile, MediaMetadata | None] | None:
+        if metadata is None:
+            return file, metadata
+        if random.random() < self._chance:
+            self.logger.debug(f"Ignoring {metadata.title} @ {file.path}")
+            return file, None
+        return file, metadata

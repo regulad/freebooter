@@ -61,9 +61,7 @@ class LocalMediaStorage(Uploader):
         for file, metadata in medias:
             potential_path = self._directory.joinpath(file.path.name)
             while potential_path.exists():
-                potential_path = potential_path.with_name(
-                    f"{potential_path.stem}_1{potential_path.suffix}"
-                )
+                potential_path = potential_path.with_name(f"{potential_path.stem}_1{potential_path.suffix}")
 
             copyfile(file.path, potential_path)
             self.logger.debug(f"Saved {file.path.name} to {self._directory}")

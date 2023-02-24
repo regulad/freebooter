@@ -65,9 +65,7 @@ class RSSWatcher(YTDLThreadWatcher):
         self._copy = copy
 
     @classmethod
-    def choose_best_watcher(
-        cls, name: str, preprocessors: list[Middleware], **config
-    ) -> RSSWatcher:
+    def choose_best_watcher(cls, name: str, preprocessors: list[Middleware], **config) -> RSSWatcher:
         """
         Chooses the best RSSWatcher for the given configuration. This will be a subclass of RSSWatcher.
         """
@@ -117,9 +115,7 @@ class RSSWatcher(YTDLThreadWatcher):
             return None
 
         try:
-            with self._session.get(
-                media_url, stream=True
-            ) as response:  # type: Response
+            with self._session.get(media_url, stream=True) as response:  # type: Response
                 if response.status_code >= 400:
                     return None  # not successful
 
@@ -168,8 +164,7 @@ class RSSWatcher(YTDLThreadWatcher):
             run = [
                 parsed_entry
                 for parsed_entry in [
-                    self._parse_entry(entry, handle_if_already_handled=self._copy)
-                    for entry in feed.entries
+                    self._parse_entry(entry, handle_if_already_handled=self._copy) for entry in feed.entries
                 ]
                 if parsed_entry is not None
             ]
@@ -186,9 +181,7 @@ class RedditWatcher(RSSWatcher):
     """
 
     # MYSQL_TYPE = "CHAR(10)"  # doesn't work with other types of posts
-    SLEEP_TIME = (
-        60 * 5
-    )  # Reddit API advises 2 minutes, but it is unlikely something pops up every 2 minutes
+    SLEEP_TIME = 60 * 5  # Reddit API advises 2 minutes, but it is unlikely something pops up every 2 minutes
 
     def get_media_url(self, entry: FeedParserDict) -> str | None:
         """

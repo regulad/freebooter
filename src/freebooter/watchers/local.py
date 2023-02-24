@@ -67,9 +67,7 @@ class LocalMediaLoader(ThreadWatcher):
 
         for file in folder.iterdir():
             if file.is_dir():
-                yield from self._check_in_folder(
-                    file, handle_if_already_handled=handle_if_already_handled
-                )
+                yield from self._check_in_folder(file, handle_if_already_handled=handle_if_already_handled)
             elif file.name != ".DS_Store":  # macos ong
                 if not handle_if_already_handled and self.is_handled(file.name):
                     continue
@@ -104,9 +102,7 @@ class LocalMediaLoader(ThreadWatcher):
                 yield scratch_file, metadata
 
     def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
-        run = list(
-            self._check_in_folder(self._directory, handle_if_already_handled=self._copy)
-        )
+        run = list(self._check_in_folder(self._directory, handle_if_already_handled=self._copy))
 
         if self._copy:
             self._copy = False

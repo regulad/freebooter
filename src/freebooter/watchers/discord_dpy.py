@@ -34,9 +34,7 @@ from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, Platform, MediaType
 
 null_handler = NullHandler()
-discord.utils.setup_logging(
-    level=INFO if __debug__ else WARNING, root=False, handler=null_handler
-)
+discord.utils.setup_logging(level=INFO if __debug__ else WARNING, root=False, handler=null_handler)
 
 
 class DiscordPyWatcher(AsyncioWatcher):
@@ -80,10 +78,13 @@ class DiscordPyWatcher(AsyncioWatcher):
         self._copy = copy
 
         self._discord_connection_task: Task | None = None
+        self._backtrack_task: Task | None = None
 
     async def aclose(self) -> None:
-        super().close()
+        await super().aclose()
         if self._client is not None and not self._client.is_closed():
+            if self._backtrack_task is not None:
+                self._backtrack_task.cancel(msg="Watcher closing.")
             await self._client.close()
             if self._discord_connection_task is not None:
                 await self._discord_connection_task  # let it finish
@@ -99,9 +100,7 @@ class DiscordPyWatcher(AsyncioWatcher):
 
             scratch_file = self._file_manager.get_file(file_name=attachment.filename)
 
-            await attachment.save(
-                scratch_file.path
-            )  # discord.py messed up the typing on this
+            await attachment.save(scratch_file.path)  # discord.py messed up the typing on this
 
             media_metadata = MediaMetadata(
                 media_id=str(attachment.id),
@@ -126,20 +125,18 @@ class DiscordPyWatcher(AsyncioWatcher):
         ):
             medias.append((scratch_file, media_metadata))
 
-        return await self._a_preprocess_and_execute(medias)
+        if medias:
+            return await self._a_preprocess_and_execute(medias)
+        else:
+            return []
 
-    async def on_message(self, message: Message) -> list[MediaMetadata]:
+    async def on_message(self, message: Message) -> None:
         if message.channel.id in self._channels and message.attachments:
-            self.logger.debug(
-                f"Received message from {message.author} in {message.channel}."
-            )
+            self.logger.debug(f"Received message from {message.author} in {message.channel}.")
             medias = await self.process_message(message)
             self.logger.debug(
                 f"Finished processing message from {message.author} in {message.channel}. With return {medias}."
             )
-        else:
-            medias = []
-        return medias
 
     async def backtrack(self) -> None:
         assert self._client is not None, "Client not set."
@@ -154,19 +151,17 @@ class DiscordPyWatcher(AsyncioWatcher):
                 continue
 
             if hasattr(channel, "history"):  # not all channel types have history
-                async for message in channel.history(
-                    limit=self._backtrack, oldest_first=True
-                ):
+                async for message in channel.history(limit=self._backtrack, oldest_first=True):
                     if message.attachments:
-                        await self.process_message(
-                            message, handle_if_already_handled=self._copy
-                        )
+                        await self.process_message(message, handle_if_already_handled=self._copy)
 
         if self._copy:
             self._copy = False
 
     async def async_prepare(self) -> None:
         await super().async_prepare()
+
+        loop = self._loop or get_event_loop()
 
         intents = Intents.default()
         intents.message_content = True
@@ -192,14 +187,13 @@ class DiscordPyWatcher(AsyncioWatcher):
             self._client = Client(intents=intents, **self._discord_client_kwargs)
             self._client.on_message = self.on_message  # type: ignore
 
-        self._discord_connection_task = get_event_loop().create_task(
-            self._client.start(self._token)
-        )
+        await self._client.login(self._token)
+        self._discord_connection_task = loop.create_task(self._client.connect())
 
         self.logger.debug(f"{self.name} logged in to discord successfully.")
 
         if self._backtrack is None or self._backtrack > 0:
-            get_event_loop().create_task(self.backtrack())
+            self._backtrack_task = loop.create_task(self.backtrack())
 
 
 __all__ = ("DiscordPyWatcher",)

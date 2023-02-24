@@ -63,9 +63,7 @@ class MediaType(Enum):
     VIDEO = auto()
 
     @classmethod
-    def from_twitter_type(
-        cls, twitter_type: Literal["photo", "animated_gif", "video"]
-    ) -> MediaType:
+    def from_twitter_type(cls, twitter_type: Literal["photo", "animated_gif", "video"]) -> MediaType:
         match twitter_type:
             case "photo" | "animated_gif":
                 return cls.PHOTO
@@ -120,9 +118,7 @@ class MediaType(Enum):
             case "matroska,webm":
                 return cls.VIDEO
             case _:
-                logger.warning(
-                    f"Unknown media type: {format_name}! Attempting to search from file path..."
-                )
+                logger.warning(f"Unknown media type: {format_name}! Attempting to search from file path...")
                 file = Path(output_format["filename"])
                 return cls.from_file_path(file)
 

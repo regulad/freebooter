@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freebooter"
-version = "1.6.2"
+version = "1.7.0"
 description = "freebooter downloads photos & videos from the internet and uploads it onto your social media accounts."
 authors = ["Parker Wahle <regulad@regulad.xyz>"]
 license = "GPLv3"
@@ -76,3 +76,6 @@ freebooter_twitter = "freebooter.__main__:authorize_twitter_api"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 119

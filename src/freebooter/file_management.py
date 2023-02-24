@@ -49,9 +49,7 @@ class ScratchFile:
         self._path = path
         self._delete = delete_when_done
 
-        self._closing_lock = (
-            Lock()
-        )  # to prevent a deadlock since the code is hacky for closing this
+        self._closing_lock = Lock()  # to prevent a deadlock since the code is hacky for closing this
 
         self._file: FileIO | None = None
 
@@ -93,9 +91,7 @@ class ScratchFile:
 
     def __del__(self) -> None:
         if not self.closed:
-            warnings.warn(
-                "ScratchFile objects should be closed manually!", ResourceWarning
-            )
+            warnings.warn("ScratchFile objects should be closed manually!", ResourceWarning)
             self.close()
 
     @property
@@ -143,17 +139,13 @@ class FileManager:
         for file in self._files.copy():  # changes in size
             file.close()
         for file in self.directory.iterdir():
-            logger.debug(
-                f"Deleting file {file} because it was not deleted automatically!"
-            )
+            logger.debug(f"Deleting file {file} because it was not deleted automatically!")
             file.unlink()
         self._closed = True
 
     def __del__(self):
         if not self.closed:
-            warnings.warn(
-                "FileManager objects should be closed manually!", ResourceWarning
-            )
+            warnings.warn("FileManager objects should be closed manually!", ResourceWarning)
             self.close()
 
     @property
@@ -184,14 +176,12 @@ class FileManager:
 
             if file_name is None:
                 assert file_extension is not None, "File extension must be specified"
-                assert (
-                    file_extension.startswith(".") and not file_extension.endswith(".")
-                ) or len(file_extension) == 0, "File extension must start with a period"
+                assert (file_extension.startswith(".") and not file_extension.endswith(".")) or len(
+                    file_extension
+                ) == 0, "File extension must start with a period"
                 file_name = self.get_file_ident() + file_extension
 
-            file_name = (
-                Path(file_name) if not isinstance(file_name, Path) else file_name
-            )
+            file_name = Path(file_name) if not isinstance(file_name, Path) else file_name
 
             if not file_name.is_absolute():
                 file_name = self._directory / file_name
@@ -211,9 +201,7 @@ class FileManager:
                 )
                 # Handing over a file that exists could result in unexpected behavior.
             else:
-                scratch_file = ScratchFile(
-                    self, file_name, initial_bytes
-                )  # Good to go!
+                scratch_file = ScratchFile(self, file_name, initial_bytes)  # Good to go!
                 self._files.append(scratch_file)
                 return scratch_file
 

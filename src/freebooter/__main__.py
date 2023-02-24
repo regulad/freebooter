@@ -181,9 +181,7 @@ def authorize_twitter_api() -> None:
     consumer_key = args.consumer_key or MAC_OAUTH_CONSUMER_KEY
     consumer_secret = args.consumer_secret or MAC_OAUTH_CONSUMER_SECRET
 
-    oauth = OAuth1UserHandler(
-        consumer_key=consumer_key, consumer_secret=consumer_secret, callback="oob"
-    )
+    oauth = OAuth1UserHandler(consumer_key=consumer_key, consumer_secret=consumer_secret, callback="oob")
 
     url = oauth.get_authorization_url(signin_with_twitter=True)
 
@@ -203,9 +201,7 @@ def main() -> None:
 
     # Asyncio stuff - for d.py & future use
     loop = asyncio.new_event_loop()
-    loop.set_exception_handler(
-        lambda eloop, context: logging.error(f"Exception in {eloop}: {context}")
-    )
+    loop.set_exception_handler(lambda eloop, context: logging.error(f"Exception in {eloop}: {context}"))
 
     # logging configuration
     if find_spec("discord") is not None:
@@ -218,9 +214,7 @@ def main() -> None:
         standard_handler: StreamHandler = StreamHandler(sys.stdout)
         error_handler: StreamHandler = StreamHandler(sys.stderr)
 
-        standard_handler.addFilter(
-            lambda record: record.levelno < ERROR
-        )  # keep errors to stderr
+        standard_handler.addFilter(lambda record: record.levelno < ERROR)  # keep errors to stderr
         error_handler.setLevel(ERROR)
 
         basicConfig(
@@ -347,9 +341,7 @@ def main() -> None:
         existing_connection: Connection | None
         try:
             existing_connection = default_get_connection()
-        except (
-            PoolError
-        ):  # This will never actually get raised, but it is here incase it gets implemented
+        except PoolError:  # This will never actually get raised, but it is here incase it gets implemented
             existing_connection = None
 
         if existing_connection is not None:
@@ -377,27 +369,21 @@ def main() -> None:
     shutdown_event = Event()
 
     def upload_handler(
-        medias: list[tuple[ScratchFile, MediaMetadata]]
+        medias: list[tuple[ScratchFile, MediaMetadata | None]]
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         logger.debug(f"Running middlewares on {len(medias)} files...")
 
         for middleware in configuration.middlewares():
             medias = middleware.process_many(medias)
 
-        logger.debug(
-            f"Middlewares were processed. Running uploaders on {len(medias)} files..."
-        )
+        logger.debug(f"Middlewares were processed. Running uploaders on {len(medias)} files...")
 
         out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
 
         with ThreadPoolExecutor(max_workers=max_workers) as upload_executor:
-            uploader_futures: list[
-                Future[list[tuple[ScratchFile, MediaMetadata | None]]]
-            ] = []
+            uploader_futures: list[Future[list[tuple[ScratchFile, MediaMetadata | None]]]] = []
             for uploader in configuration.uploaders():
-                uploader_futures.append(
-                    upload_executor.submit(uploader.upload_and_preprocess, medias)
-                )
+                uploader_futures.append(upload_executor.submit(uploader.upload_and_preprocess, medias))
             for future in uploader_futures:
                 out_medias.extend(future.result())
 
@@ -406,15 +392,13 @@ def main() -> None:
         return out_medias
 
     def callback(
-        medias: list[tuple[ScratchFile, MediaMetadata]],
+        medias: list[tuple[ScratchFile, MediaMetadata | None]],
         *,
         executor: Executor,
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         return executor.submit(upload_handler, medias)
 
-    with ThreadPoolExecutor(
-        thread_name_prefix="Uploader", max_workers=max_workers
-    ) as callback_executor:
+    with ThreadPoolExecutor(thread_name_prefix="Uploader", max_workers=max_workers) as callback_executor:
         # Preparing
         prepare_kwargs = {
             "shutdown_event": shutdown_event,
@@ -451,9 +435,7 @@ def main() -> None:
                 watcher.start()
         logger.debug("Done.")
 
-        with ThreadPoolExecutor(
-            thread_name_prefix="AsyncRunner", max_workers=max_workers
-        ) as runner_executor:
+        with ThreadPoolExecutor(thread_name_prefix="AsyncRunner", max_workers=max_workers) as runner_executor:
             loop.set_default_executor(runner_executor)
             try:
                 logger.info("Running...")

@@ -25,7 +25,7 @@ from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 
 
-class MediaCollector(Middleware):
+class Collector(Middleware):
     """
     This middleware collects media and then releases it when enough have been accumulated.
     """
@@ -40,9 +40,7 @@ class MediaCollector(Middleware):
         self._count = count
 
         self._media: Queue[tuple[ScratchFile, MediaMetadata]] = Queue()
-        self._lock = (
-            Lock()
-        )  # need to lock to prevent stuff from being "stolen" by other threads
+        self._lock = Lock()  # need to lock to prevent stuff from being "stolen" by other threads
 
     def close(self) -> None:
         """
@@ -55,25 +53,37 @@ class MediaCollector(Middleware):
             got_media[0].close()
 
     def process_many(
-        self, media: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> list[tuple[ScratchFile, MediaMetadata]]:
+        self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
+    ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
+        mut_medias = medias.copy()  # safe to mutate this list because it's a copy
         with self._lock:
-            for media_pair in media:
-                self.logger.debug(f"Collecting media {media_pair[1].id}.")
-                processed = self._process(*media_pair)
-                if processed is not None:
-                    self._media.put(processed)
+            for media_pair in medias:
+                file, metadata = media_pair
 
-            returned_medias: list[tuple[ScratchFile, MediaMetadata]] = []
+                if metadata is None:
+                    # Don't remove it from the list. Let it be closed normally.
+                    continue
+
+                self.logger.debug(f"Collecting media {metadata.id}.")
+
+                processed_pair = self._process(file, metadata)
+
+                if processed_pair is not None:
+                    processed_file, processed_metadata = processed_pair
+                    if processed_metadata is None:
+                        mut_medias[mut_medias.index(media_pair)] = processed_pair
+                    else:
+                        self._media.put(processed_pair)  # type: ignore  # mypy is wrong, the second element of the tuple can never be none
+                        mut_medias.remove(media_pair)
 
             self.logger.debug(f"Queue is {self._media.qsize()} long.")
 
-            while len(returned_medias) < self._count and not self._media.empty():
+            while len(mut_medias) < self._count and not self._media.empty():
                 got_media = self._media.get()
                 self.logger.debug(f"Releasing media {got_media[1].id}.")
-                returned_medias.append(got_media)
+                mut_medias.append(got_media)
 
-            return returned_medias
+            return mut_medias
 
 
-__all__ = ("MediaCollector",)
+__all__ = ("Collector",)

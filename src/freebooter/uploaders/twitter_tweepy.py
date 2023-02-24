@@ -123,28 +123,18 @@ class TweepyTwitterUploader(Uploader):
                 # Twitter's officially supported file formats are GIF, PNG, and JPEG.
                 # We can upload them raw here.
                 if file.path.suffix in [".gif", ".png", ".jpeg"]:
-                    twitter_media = self._api.media_upload(
-                        str(file.path), **self._tweepy_upload_kwargs
-                    )
+                    twitter_media = self._api.media_upload(str(file.path), **self._tweepy_upload_kwargs)
                 # For other photos, we need to convert them to JPG with Pillow, this is pretty trivial.
                 elif metadata.type is MediaType.PHOTO:
-                    with self._file_manager.get_file(
-                        file_extension=".jpg"
-                    ) as jpg_scratch:
-                        with Image.open(file.path) as other_image, other_image.convert(
-                            "RGB"
-                        ) as rgb_image:
+                    with self._file_manager.get_file(file_extension=".jpg") as jpg_scratch:
+                        with Image.open(file.path) as other_image, other_image.convert("RGB") as rgb_image:
                             rgb_image.save(jpg_scratch.path, format="JPEG", quality=95)
 
-                        twitter_media = self._api.media_upload(
-                            str(jpg_scratch.path), **self._tweepy_upload_kwargs
-                        )
+                        twitter_media = self._api.media_upload(str(jpg_scratch.path), **self._tweepy_upload_kwargs)
                 # Videos are fine too, but we need to use the media_category=tweet_video parameter.
                 # Tweepy also has a bug with wait_for_async_finalize=True, so we need to set it to False.
                 elif metadata.type is MediaType.VIDEO:
-                    with self._file_manager.get_file(
-                        file_extension=".mp4"
-                    ) as mp4_scratch:
+                    with self._file_manager.get_file(file_extension=".mp4") as mp4_scratch:
                         # We need to convert the video to MP4 with ffmpeg.
                         # Even if it is an MP4, we may need to re-encode it to make it support twitter.
                         # We also need to set the video to 720p, as twitter doesn't support higher resolutions
@@ -177,14 +167,10 @@ class TweepyTwitterUploader(Uploader):
 
                 yield file, metadata, twitter_media
             except Exception as e:
-                self.logger.exception(
-                    f"Error uploading media to Twitter: {e}", exc_info=e
-                )
+                self.logger.exception(f"Error uploading media to Twitter: {e}", exc_info=e)
                 yield file, metadata, None
 
-    def post_with_twitter_medias(
-        self, metadata: MediaMetadata, twitter_medias: list[Media]
-    ) -> MediaMetadata:
+    def post_with_twitter_medias(self, metadata: MediaMetadata, twitter_medias: list[Media]) -> MediaMetadata:
         """
         Posts the given medias to Twitter and returns a new MediaMetadata from the status that was posted.
         """
@@ -424,24 +410,15 @@ class TweepyTwitterUploader(Uploader):
                     continue
                 # If we do, let's upload them!
                 # We always increment one at a time, so we don't need to check > or == for the limit, == will do.
-                elif (
-                    len(last_x_medias) == self._medias_per_tweet
-                    or len(last_x_medias) == 4
-                ):
+                elif len(last_x_medias) == self._medias_per_tweet or len(last_x_medias) == 4:
                     try:
-                        twitter_medias = [
-                            twitter_media for _, _, twitter_media in last_x_medias
-                        ]
+                        twitter_medias = [twitter_media for _, _, twitter_media in last_x_medias]
                         # The metadata we are about to post with is the most recent.
-                        ret_metadata = self.post_with_twitter_medias(
-                            metadata, twitter_medias
-                        )
+                        ret_metadata = self.post_with_twitter_medias(metadata, twitter_medias)
                         for file, _, _ in last_x_medias:
                             yield file, ret_metadata
                     except Exception as e:
-                        self.logger.exception(
-                            f"Error posting to Twitter: {e}", exc_info=e
-                        )
+                        self.logger.exception(f"Error posting to Twitter: {e}", exc_info=e)
                         for file, _, _ in last_x_medias:
                             yield file, None
                     finally:
@@ -454,9 +431,7 @@ class TweepyTwitterUploader(Uploader):
         if len(last_x_medias) > 0 and self._post_if_indivisible:
             metadata = last_x_medias[-1][1]
             try:
-                twitter_medias = [
-                    twitter_media for _, _, twitter_media in last_x_medias
-                ]
+                twitter_medias = [twitter_media for _, _, twitter_media in last_x_medias]
                 ret_metadata = self.post_with_twitter_medias(metadata, twitter_medias)
                 for file, _, _ in last_x_medias:
                     yield file, ret_metadata

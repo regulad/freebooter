@@ -56,9 +56,7 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
         """
 
         if not (channel_id.startswith("UC") and len(channel_id) == 24):
-            raise ValueError(
-                "Invalid channel ID. Channel ID must start with UC and be 24 characters long"
-            )
+            raise ValueError("Invalid channel ID. Channel ID must start with UC and be 24 characters long")
 
         super().__init__(
             name,
@@ -106,15 +104,11 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
         assert self.ready, "Watcher is not ready!"
         assert self._downloader is not None, "Downloader is not set!"
 
-        self.logger.info(
-            f"Checking for uploads on YouTube channel {self._channel_id}.."
-        )
+        self.logger.info(f"Checking for uploads on YouTube channel {self._channel_id}..")
 
         try:
             # First, we need to get the list of playlists from the channels.
-            info: dict = self._downloader.extract_info(
-                self._channel_url, download=False, process=False
-            )
+            info: dict = self._downloader.extract_info(self._channel_url, download=False, process=False)
 
             playlists: list[dict] = info["entries"]
 
@@ -140,9 +134,7 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
                         break
 
             if chosen_playlist is None:
-                self.logger.error(
-                    f"Could not find playlist {self._playlist} on channel {self._channel_id}!"
-                )
+                self.logger.error(f"Could not find playlist {self._playlist} on channel {self._channel_id}!")
                 return []
 
             videos: Generator[dict, None, None] = chosen_playlist["entries"]

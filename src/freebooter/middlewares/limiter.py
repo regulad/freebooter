@@ -62,14 +62,12 @@ class Limiter(Middleware):
         Returns a random period length within the variance.
         """
         return self._period + timedelta(
-            seconds=random.uniform(
-                -self._variance.total_seconds(), self._variance.total_seconds()
-            )
+            seconds=random.uniform(-self._variance.total_seconds(), self._variance.total_seconds())
         )
 
     def process_many(
-        self, media: list[tuple[ScratchFile, MediaMetadata]]
-    ) -> list[tuple[ScratchFile, MediaMetadata]]:
+        self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
+    ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         with self._lock:
             # If the start time + the period is before right now, reset everything.
             if (self._counter_started_at + self._current_period) < datetime.now():
@@ -77,8 +75,13 @@ class Limiter(Middleware):
                 self._current_period = self.random_period_length()
                 self._current_count = 0
 
-            # Increment the amount in this period
-            if media:
+            # Increment the amount in this period, if the medias are real.
+            real_medias = False
+            for media in medias:
+                file, metadata = media
+                if metadata is not None:
+                    real_medias = True
+            if real_medias:
                 self._current_count += 1
 
             if self._current_count > self._max_amount_per_period:
@@ -86,14 +89,12 @@ class Limiter(Middleware):
                     f"Reached limit of {self._max_amount_per_period} in {self._current_period}! "
                     f"Sleeping until the next period begins."
                 )
-                time_until_next_period = (
-                    self._counter_started_at + self._current_period
-                ) - datetime.now()
+                time_until_next_period = (self._counter_started_at + self._current_period) - datetime.now()
                 seconds_to_sleep_for = time_until_next_period.total_seconds()
                 self.logger.debug(f"Sleeping for {time_until_next_period}.")
                 time.sleep(seconds_to_sleep_for)
 
-            return media
+            return medias
 
 
 __all__ = ("Limiter",)

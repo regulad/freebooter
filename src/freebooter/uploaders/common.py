@@ -20,6 +20,7 @@ from __future__ import annotations
 from abc import ABCMeta
 from logging import getLogger, Logger
 from threading import Event
+from typing import cast
 
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata
@@ -51,9 +52,7 @@ class Uploader(metaclass=ABCMeta):
             and all(middleware.ready for middleware in self.preprocessors)
         )
 
-    def prepare(
-        self, shutdown_event: Event, file_manager: FileManager, **kwargs
-    ) -> None:
+    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
         assert not self.ready, "Uploader is already ready!"
 
         self.logger.debug(f"Preparing uploader {self.name}...")
@@ -72,18 +71,32 @@ class Uploader(metaclass=ABCMeta):
         raise NotImplementedError
 
     def upload_and_preprocess(
-        self, medias: list[tuple[ScratchFile, MediaMetadata]]
+        self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
         for middleware in self.preprocessors:
             medias = middleware.process_many(medias)
         try:
-            return self.upload(medias)
+            uploaded: list[tuple[ScratchFile, MediaMetadata | None]] = []
+
+            # Add the "real" uploads
+            valid_medias: list[tuple[ScratchFile, MediaMetadata]] = cast(
+                "list[tuple[ScratchFile, MediaMetadata]]",
+                # mypy also fucks up this cast
+                [media for media in medias if media[1] is not None],
+            )
+            real_uploads = self.upload(valid_medias)
+            uploaded.extend(real_uploads)
+
+            # Add the leftovers
+            uploaded.extend(media for media in medias if media[1] is None)
+
+            return uploaded
         except Exception as e:
             self.logger.exception(f"Failed to upload media: {e}")
             return []
 
     def close(self) -> None:
-        self.logger.debug(f"Closing {self.name}...")
+        self.logger.debug(f"Closing uploader {self.name}...")
 
         for middleware in self.preprocessors:
             middleware.close()

@@ -22,15 +22,15 @@ from typing import Any, Type, Mapping, Generator
 
 import jsonschema
 
-from . import SelfcordWatcher
 from ._assets import ASSETS
 from .config import Configuration
 from .middlewares import (
     Middleware,
     MetadataModifier,
-    MediaCollector,
+    Collector,
     Dropper,
     Limiter,
+    Ignorer,
 )
 from .uploaders import (
     Uploader,
@@ -49,6 +49,7 @@ from .watchers import (
     LocalMediaLoader,
     InstaloaderWatcher,
     DiscordPyWatcher,
+    SelfcordWatcher,
 )
 
 CONFIG_SCHEMA_TRAVERSABLE = ASSETS / "config-schema.json"
@@ -67,9 +68,10 @@ def check_config(config: dict[str, Any]) -> None:
 MIDDLEWARES: Mapping[str, Type[Middleware]] = FrozenDict(
     {
         "metadata": MetadataModifier,
-        "collector": MediaCollector,
+        "collector": Collector,
         "dropper": Dropper,
         "limiter": Limiter,
+        "ignorer": Ignorer,
     }
 )
 
@@ -122,9 +124,7 @@ class LegacyYamlConfiguration(Configuration):
         self.uploader_cache = {}
         self.middleware_cache = {}
 
-    def _middleware_of(
-        self, middleware_data: dict[str, Any], *, prepend_name: str = ""
-    ) -> Middleware:
+    def _middleware_of(self, middleware_data: dict[str, Any], *, prepend_name: str = "") -> Middleware:
         middleware_cls: Type[Middleware] = self.middleware_map[middleware_data["type"]]
 
         if prepend_name:
@@ -150,8 +150,7 @@ class LegacyYamlConfiguration(Configuration):
             return self.uploader_cache[name]
 
         preprocessors = [
-            self._middleware_of(middleware, prepend_name=name)
-            for middleware in uploader_data["preprocessors"]
+            self._middleware_of(middleware, prepend_name=name) for middleware in uploader_data["preprocessors"]
         ]
 
         uploader = uploader_cls(name, preprocessors, **uploader_data["config"])
@@ -169,8 +168,7 @@ class LegacyYamlConfiguration(Configuration):
             return self.watcher_cache[name]
 
         preprocessors = [
-            self._middleware_of(middleware, prepend_name=name)
-            for middleware in watcher_data["preprocessors"]
+            self._middleware_of(middleware, prepend_name=name) for middleware in watcher_data["preprocessors"]
         ]
 
         watcher = watcher_cls(name, preprocessors, **watcher_data["config"])

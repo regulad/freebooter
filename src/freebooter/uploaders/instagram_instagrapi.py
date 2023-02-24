@@ -78,9 +78,7 @@ class InstagrapiUploader(Uploader):
         retry_count: int = 5,
         session_json_path: str | None = None,
         # Uploader settings
-        mode: Literal[
-            "singleton", "story", "album", "reels", "igtv", "hybrid"
-        ] = "singleton",
+        mode: Literal["singleton", "story", "album", "reels", "igtv", "hybrid"] = "singleton",
         **config,
     ) -> None:
         """
@@ -209,9 +207,7 @@ class InstagrapiUploader(Uploader):
         # Watcher Configuration
         self._mode = mode
 
-    def _freeze(
-        self, reason: str, unfreeze_at: datetime.datetime | None = None, **kwargs: Any
-    ) -> None:
+    def _freeze(self, reason: str, unfreeze_at: datetime.datetime | None = None, **kwargs: Any) -> None:
         assert self._sleeping_until is None, "Already sleeping!"
 
         time_now = datetime.datetime.now()
@@ -225,9 +221,7 @@ class InstagrapiUploader(Uploader):
 
         # BLOCKING
         until_delta = unfreeze_at - time_now
-        self.logger.warning(
-            f'Freezing for "{reason}" until {unfreeze_at}! ({until_delta})'
-        )
+        self.logger.warning(f'Freezing for "{reason}" until {unfreeze_at}! ({until_delta})')
         sleep_for_seconds = max(until_delta.total_seconds(), 0)  # can't be under 0
         time.sleep(sleep_for_seconds)
 
@@ -271,9 +265,7 @@ class InstagrapiUploader(Uploader):
             elif isinstance(e, FeedbackRequired):
                 message = client.last_json["feedback_message"]
                 if "This action was blocked. Please try again later" in message:
-                    self._freeze(
-                        message, hours=6
-                    )  # this must have been meant to be 6 hours
+                    self._freeze(message, hours=6)  # this must have been meant to be 6 hours
                     # client.settings = self.rebuild_client_settings()
                     # return self.update_client_settings(client.get_settings())
                 elif "We restrict certain activity to protect our community" in message:
@@ -286,9 +278,7 @@ class InstagrapiUploader(Uploader):
                     This block will expire on 2020-03-27.
                     """
                     yyyy_mm_dd = re.search(r"on (\d{4}-\d{2}-\d{2})", message)
-                    unfreeze_at = datetime.datetime.strptime(
-                        yyyy_mm_dd.group(1), "%Y-%m-%d"
-                    )
+                    unfreeze_at = datetime.datetime.strptime(yyyy_mm_dd.group(1), "%Y-%m-%d")
                     self._freeze(message, unfreeze_at=unfreeze_at)
             elif isinstance(e, PleaseWaitFewMinutes):
                 self._freeze(str(e), hours=1)
@@ -298,9 +288,7 @@ class InstagrapiUploader(Uploader):
         if self._session_json_path is not None and self._session_json_path.exists():
             self._iclient.load_settings(self._session_json_path)
         else:
-            self.logger.info(
-                "Logging in to Instagram for the first time, this may take a while..."
-            )
+            self.logger.info("Logging in to Instagram for the first time, this may take a while...")
 
     def _save_iclient(self) -> None:
         if self._session_json_path is not None:
@@ -312,9 +300,7 @@ class InstagrapiUploader(Uploader):
         self._iclient.public.close()
         super().close()
 
-    def prepare(
-        self, shutdown_event: Event, file_manager: FileManager, **kwargs
-    ) -> None:
+    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
         super().prepare(shutdown_event, file_manager, **kwargs)
 
         self._load_iclient()
@@ -344,9 +330,7 @@ class InstagrapiUploader(Uploader):
                                     # Instagram doesn't like gifs.
                                     # We will need to do some special handling to extract the first frame.
 
-                                    with self._file_manager.get_file(
-                                        file_extension=".jpg"
-                                    ) as temp_file:
+                                    with self._file_manager.get_file(file_extension=".jpg") as temp_file:
                                         with Image.open(media.path) as gif:
                                             gif.seek(0)
                                             with gif.convert("RGB") as image:
@@ -355,9 +339,7 @@ class InstagrapiUploader(Uploader):
                                         instagram_medias.append(
                                             (
                                                 media,
-                                                self._iclient.photo_upload(
-                                                    temp_file.path, metadata.description
-                                                ),
+                                                self._iclient.photo_upload(temp_file.path, metadata.description),
                                             )
                                         )
                                 elif file_extension not in [".jpg", ".jpeg"]:
@@ -367,29 +349,21 @@ class InstagrapiUploader(Uploader):
                                     # Instagram says that it can handle PNG, but I couldn't get it to work.
                                     # Same goes for HEIC/HEIF.
 
-                                    with self._file_manager.get_file(
-                                        file_extension=".jpg"
-                                    ) as temp_file:
-                                        with Image.open(
-                                            media.path
-                                        ) as image, image.convert("RGB") as rgb_image:
+                                    with self._file_manager.get_file(file_extension=".jpg") as temp_file:
+                                        with Image.open(media.path) as image, image.convert("RGB") as rgb_image:
                                             rgb_image.save(temp_file.path, "JPEG")
 
                                         instagram_medias.append(
                                             (
                                                 media,
-                                                self._iclient.photo_upload(
-                                                    temp_file.path, metadata.description
-                                                ),
+                                                self._iclient.photo_upload(temp_file.path, metadata.description),
                                             )
                                         )
                                 else:
                                     instagram_medias.append(
                                         (
                                             media,
-                                            self._iclient.photo_upload(
-                                                media.path, metadata.description
-                                            ),
+                                            self._iclient.photo_upload(media.path, metadata.description),
                                         )
                                     )
                             case MediaType.VIDEO:
@@ -397,24 +371,18 @@ class InstagrapiUploader(Uploader):
                                     instagram_medias.append(
                                         (
                                             media,
-                                            self._iclient.video_upload(
-                                                media.path, metadata.description
-                                            ),
+                                            self._iclient.video_upload(media.path, metadata.description),
                                         )
                                     )
                                 elif self._mode == "hybrid":
                                     instagram_medias.append(
                                         (
                                             media,
-                                            self._iclient.clip_upload(
-                                                media.path, metadata.description
-                                            ),
+                                            self._iclient.clip_upload(media.path, metadata.description),
                                         )
                                     )
                     except Exception as e:
-                        self.logger.error(
-                            f"Failed to upload {media.path} to Instagram: {e}"
-                        )
+                        self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
                         continue
             case "reels":
@@ -427,15 +395,11 @@ class InstagrapiUploader(Uploader):
                         instagram_medias.append(
                             (
                                 media,
-                                self._iclient.clip_upload(
-                                    media.path, metadata.description
-                                ),
+                                self._iclient.clip_upload(media.path, metadata.description),
                             )
                         )
                     except Exception as e:
-                        self.logger.error(
-                            f"Failed to upload {media.path} to Instagram: {e}"
-                        )
+                        self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
                         continue
             case "story":
@@ -457,9 +421,7 @@ class InstagrapiUploader(Uploader):
                                     )
                                 )
                     except Exception as e:
-                        self.logger.error(
-                            f"Failed to upload {media.path} to Instagram: {e}"
-                        )
+                        self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
                         continue
             case "album":
@@ -492,9 +454,7 @@ class InstagrapiUploader(Uploader):
                             )
                         )
                     except Exception as e:
-                        self.logger.error(
-                            f"Failed to upload {media.path} to Instagram: {e}"
-                        )
+                        self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
                         continue
 
@@ -511,9 +471,7 @@ class InstagrapiUploader(Uploader):
                     description=instagram_media.caption_text,
                     tags=[],
                     categories=[],
-                    media_type=MediaType.PHOTO
-                    if instagram_media.media_type == 1
-                    else MediaType.VIDEO,
+                    media_type=MediaType.PHOTO if instagram_media.media_type == 1 else MediaType.VIDEO,
                     data=instagram_media.dict(),
                 )
                 url = f"https://www.instagram.com/p/{instagram_media.code}/"
@@ -525,9 +483,7 @@ class InstagrapiUploader(Uploader):
                     description=None,
                     tags=[],
                     categories=[],
-                    media_type=MediaType.PHOTO
-                    if instagram_media.media_type == 1
-                    else MediaType.VIDEO,
+                    media_type=MediaType.PHOTO if instagram_media.media_type == 1 else MediaType.VIDEO,
                     data=instagram_media.dict(),
                 )
 
