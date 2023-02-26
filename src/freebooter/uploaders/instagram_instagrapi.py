@@ -404,19 +404,18 @@ class InstagrapiUploader(Uploader):
                             case MediaType.PHOTO:
                                 instagram_medias.append((media, self.upload_photo(media, metadata)))
                             case MediaType.VIDEO:
-                                if self._mode == "singleton":
-                                    instagram_medias.append(
-                                        (
+                                instagram_medias.append(
+                                    (
+                                        media,
+                                        self.upload_video(
                                             media,
-                                            self.upload_video(
-                                                media,
-                                                metadata,
-                                                InstagramVideoType.REELS
-                                                if self._mode == "hybrid"
-                                                else InstagramVideoType.VIDEO,
-                                            ),
-                                        )
+                                            metadata,
+                                            InstagramVideoType.REELS
+                                            if self._mode == "hybrid"
+                                            else InstagramVideoType.VIDEO,
+                                        ),
                                     )
+                                )
                     except Exception as e:
                         self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))

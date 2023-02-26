@@ -23,4 +23,4 @@ from .middlewares import *
 from .uploaders import *
 from .watchers import *
 
-version = "1.7.6"
+version = "1.7.7"

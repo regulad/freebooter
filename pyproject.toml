@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freebooter"
-version = "1.7.6"
+version = "1.7.7"
 description = "freebooter downloads photos & videos from the internet and uploads it onto your social media accounts."
 authors = ["Parker Wahle <regulad@regulad.xyz>"]
 license = "GPLv3"
