@@ -23,11 +23,13 @@ import random
 import re
 import time
 import typing
+from enum import Enum, auto
 from logging import getLogger, INFO, WARNING
 from pathlib import Path
 from threading import Lock, Event
 from typing import Any, Literal
 
+import ffmpeg
 from PIL import Image
 from instagrapi import Client
 from instagrapi.exceptions import (
@@ -54,6 +56,16 @@ from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 
 getLogger("private_request").setLevel(INFO if __debug__ else WARNING)
+
+
+class InstagramVideoType(Enum):
+    """
+    The type of video to upload to Instagram.
+    """
+
+    VIDEO = auto()
+    IGTV = auto()
+    REELS = auto()
 
 
 class InstagrapiUploader(Uploader):
@@ -310,6 +322,73 @@ class InstagrapiUploader(Uploader):
         if not instagram_login_success:
             raise RuntimeError("Failed to login to Instagram!")
 
+    def upload_photo(self, media: ScratchFile, metadata: MediaMetadata) -> InstagramMedia:
+        """
+        Uploads a photo to Instagram.
+        """
+        assert self._iclient is not None, "InstagramClient is None"
+        assert self._file_manager is not None, "FileManager is None"
+
+        file_extension = media.path.suffix
+
+        # this is not the most reliable way of detecting file types, but ffprobe is weird man
+        if file_extension == ".gif":
+            # Instagram doesn't like gifs.
+            # We will need to do some special handling to extract the first frame.
+
+            with self._file_manager.get_file(file_extension=".jpg") as temp_file:
+                with Image.open(media.path) as gif:
+                    gif.seek(0)
+                    with gif.convert("RGB") as image:
+                        image.save(temp_file.path, "JPEG")
+
+                return self._iclient.photo_upload(temp_file.path, metadata.description)
+        elif file_extension not in [".jpg", ".jpeg"]:
+            # e.g. .tiff .webp
+
+            # Instagram doesn't like non-jpg images. We need to convert them to jpegs.
+            # Instagram says that it can handle PNG, but I couldn't get it to work.
+            # Same goes for HEIC/HEIF.
+
+            with self._file_manager.get_file(file_extension=".jpg") as temp_file:
+                with Image.open(media.path) as image, image.convert("RGB") as rgb_image:
+                    rgb_image.save(temp_file.path, "JPEG")
+
+                return self._iclient.photo_upload(temp_file.path, metadata.description)
+        else:
+            return self._iclient.photo_upload(media.path, metadata.description)
+
+    def upload_video(
+        self,
+        media: ScratchFile,
+        metadata: MediaMetadata,
+        video_type: InstagramVideoType = InstagramVideoType.VIDEO,
+        **kwargs,
+    ) -> InstagramMedia:
+        """
+        Uploads a video to Instagram.
+        """
+        assert self._iclient is not None, "InstagramClient is None"
+        assert self._file_manager is not None, "FileManager is None"
+
+        with self._file_manager.get_file(file_extension=".mp4") as mp4_scratch:
+            # We don't need to modify anything like with Twitter, so we are just doing this to 100% guarantee that the
+            # media is in the correct encoding for instagram.
+
+            # Even though instagram claims to support MP4, MOV, and MKV, I've found that it only works with MP4
+            # *reliably*.
+            (ffmpeg.input(str(media.path.resolve())).output(str(mp4_scratch.path.resolve())).run())
+
+            match video_type:
+                case InstagramVideoType.VIDEO:
+                    return self._iclient.video_upload(mp4_scratch.path, metadata.description)
+                case InstagramVideoType.REELS:
+                    return self._iclient.clip_upload(mp4_scratch.path, metadata.description)
+                case InstagramVideoType.IGTV:
+                    return self._iclient.igtv_upload(
+                        mp4_scratch.path, metadata.title or "IGTV Video", metadata.description or ""
+                    )
+
     def upload(
         self, medias: list[tuple[ScratchFile, MediaMetadata]]
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
@@ -323,62 +402,19 @@ class InstagrapiUploader(Uploader):
                     try:
                         match metadata.type:
                             case MediaType.PHOTO:
-                                file_extension = media.path.suffix
-
-                                # this is not the most reliable way of detecting file types, but ffprobe is weird man
-                                if file_extension == ".gif":
-                                    # Instagram doesn't like gifs.
-                                    # We will need to do some special handling to extract the first frame.
-
-                                    with self._file_manager.get_file(file_extension=".jpg") as temp_file:
-                                        with Image.open(media.path) as gif:
-                                            gif.seek(0)
-                                            with gif.convert("RGB") as image:
-                                                image.save(temp_file.path, "JPEG")
-
-                                        instagram_medias.append(
-                                            (
-                                                media,
-                                                self._iclient.photo_upload(temp_file.path, metadata.description),
-                                            )
-                                        )
-                                elif file_extension not in [".jpg", ".jpeg"]:
-                                    # e.g. .tiff .webp
-
-                                    # Instagram doesn't like non-jpg images. We need to convert them to jpegs.
-                                    # Instagram says that it can handle PNG, but I couldn't get it to work.
-                                    # Same goes for HEIC/HEIF.
-
-                                    with self._file_manager.get_file(file_extension=".jpg") as temp_file:
-                                        with Image.open(media.path) as image, image.convert("RGB") as rgb_image:
-                                            rgb_image.save(temp_file.path, "JPEG")
-
-                                        instagram_medias.append(
-                                            (
-                                                media,
-                                                self._iclient.photo_upload(temp_file.path, metadata.description),
-                                            )
-                                        )
-                                else:
-                                    instagram_medias.append(
-                                        (
-                                            media,
-                                            self._iclient.photo_upload(media.path, metadata.description),
-                                        )
-                                    )
+                                instagram_medias.append((media, self.upload_photo(media, metadata)))
                             case MediaType.VIDEO:
                                 if self._mode == "singleton":
                                     instagram_medias.append(
                                         (
                                             media,
-                                            self._iclient.video_upload(media.path, metadata.description),
-                                        )
-                                    )
-                                elif self._mode == "hybrid":
-                                    instagram_medias.append(
-                                        (
-                                            media,
-                                            self._iclient.clip_upload(media.path, metadata.description),
+                                            self.upload_video(
+                                                media,
+                                                metadata,
+                                                InstagramVideoType.REELS
+                                                if self._mode == "hybrid"
+                                                else InstagramVideoType.VIDEO,
+                                            ),
                                         )
                                     )
                     except Exception as e:
@@ -391,13 +427,10 @@ class InstagrapiUploader(Uploader):
                         if metadata.type != MediaType.VIDEO:  # We can't do this.
                             instagram_medias.append((media, None))
                             continue
-
-                        instagram_medias.append(
-                            (
-                                media,
-                                self._iclient.clip_upload(media.path, metadata.description),
+                        else:
+                            instagram_medias.append(
+                                (media, self.upload_video(media, metadata, InstagramVideoType.REELS))
                             )
-                        )
                     except Exception as e:
                         self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
@@ -443,16 +476,7 @@ class InstagrapiUploader(Uploader):
             case "igtv":
                 for media, metadata in medias:
                     try:
-                        instagram_medias.append(
-                            (
-                                media,
-                                self._iclient.igtv_upload(
-                                    media.path,
-                                    metadata.title or "IGTV Video",
-                                    metadata.description,
-                                ),
-                            )
-                        )
+                        instagram_medias.append((media, self.upload_video(media, metadata, InstagramVideoType.IGTV)))
                     except Exception as e:
                         self.logger.error(f"Failed to upload {media.path} to Instagram: {e}")
                         instagram_medias.append((media, None))
@@ -486,8 +510,12 @@ class InstagrapiUploader(Uploader):
                     media_type=MediaType.PHOTO if instagram_media.media_type == 1 else MediaType.VIDEO,
                     data=instagram_media.dict(),
                 )
+                url = f"https://www.instagram.com/stories/{instagram_media.user.username}/{instagram_media.id}/"
 
-            self.logger.info(f"Uploaded {media.path} to Instagram at {url}")
+            if instagram_media is None:
+                self.logger.warning(f"Failed to upload {media.path} to Instagram.")
+            else:
+                self.logger.info(f"Uploaded {media.path} to Instagram at {url}")
             return_medias.append((media, freebooter_metadata))
 
         return return_medias

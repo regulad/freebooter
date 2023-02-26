@@ -30,9 +30,10 @@ from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, MediaType
 from ..middlewares import Middleware
 
-
 MAC_OAUTH_CONSUMER_KEY = "3rJOl1ODzm9yZy63FACdg"
 MAC_OAUTH_CONSUMER_SECRET = "5jPoQ5kQvMJFDYRNE8bQ4rHuds4xJqhvgNJM4awaE8"
+
+
 # The following are a set of secrets pulled from another nefarium project (neotw) that went unfisn
 
 
@@ -161,9 +162,7 @@ class TweepyTwitterUploader(Uploader):
                 else:
                     raise ValueError(f"Unknown media type: {metadata.type}")
 
-                self.logger.info(
-                    f"Uploaded {file.path} to Twitter with media ID {twitter_media.media_id_string}."
-                )  # type: ignore
+                self.logger.debug(f"Uploaded {file.path} to Twitter with media ID {twitter_media.media_id_string}.")
 
                 yield file, metadata, twitter_media
             except Exception as e:
@@ -180,6 +179,8 @@ class TweepyTwitterUploader(Uploader):
         kwargs["media_ids"] = [twitter_media.media_id for twitter_media in twitter_medias]  # type: ignore
 
         status: Status = self._api.update_status(**kwargs)
+
+        self.logger.info(f"Posted status to Twitter: {status.text} with {len(twitter_medias)} medias.")
 
         # This class is barely documented, so I included this below for future reference.
 

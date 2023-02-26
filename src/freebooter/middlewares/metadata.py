@@ -18,8 +18,8 @@
 from __future__ import annotations
 
 import random
-from typing import Any
 from string import Formatter
+from typing import Any
 
 from .common import *
 from ..file_management import ScratchFile

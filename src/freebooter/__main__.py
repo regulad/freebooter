@@ -19,12 +19,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import os
 import sys
 import webbrowser
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor, Future, Executor
+from concurrent.futures import ThreadPoolExecutor, Future, Executor, CancelledError
 from functools import partial
 from importlib.util import find_spec
 from io import FileIO
@@ -32,7 +31,6 @@ from logging import (
     basicConfig,
     DEBUG,
     INFO,
-    Logger,
     getLogger,
     StreamHandler,
     ERROR,
@@ -41,13 +39,13 @@ from os import environ
 from os.path import splitext
 from pathlib import Path
 from threading import Event
-from typing import cast, Any, Coroutine
+from typing import cast, Any
 
 import yaml
 from dislog import DiscordWebhookHandler
 from google_auth_oauthlib.flow import Flow
 from jsonschema import validate, ValidationError
-from mariadb import ConnectionPool, Connection, PoolError
+from mariadb import ConnectionPool, Connection, PoolError, MAX_POOL_SIZE
 from oauthlib.oauth2 import OAuth2Token
 from pillow_heif import register_heif_opener
 from tweepy import OAuth1UserHandler
@@ -201,7 +199,6 @@ def main() -> None:
 
     # Asyncio stuff - for d.py & future use
     loop = asyncio.new_event_loop()
-    loop.set_exception_handler(lambda eloop, context: logging.error(f"Exception in {eloop}: {context}"))
 
     # logging configuration
     if find_spec("discord") is not None:
@@ -300,8 +297,8 @@ def main() -> None:
 
     # Now we start opening connections and running our code:
 
-    # This is copied from threading.futures.ThreadPoolExecutor, but with a maximum of 64 instead of 32
-    max_workers = min(64, (os.cpu_count() or 1) + 4)
+    # This is copied from threading.futures.ThreadPoolExecutor
+    max_workers = min(32, (os.cpu_count() or 1) + 4)
 
     # MariaDB startup
 
@@ -325,7 +322,7 @@ def main() -> None:
 
     pool = ConnectionPool(
         pool_name="freebooter",
-        pool_size=max_workers,
+        pool_size=min(max(max_workers, 5), MAX_POOL_SIZE),
         **mariadb_connection_kwargs,
     )
 
@@ -380,12 +377,19 @@ def main() -> None:
 
         out_medias: list[tuple[ScratchFile, MediaMetadata | None]] = []
 
-        with ThreadPoolExecutor(max_workers=max_workers) as upload_executor:
+        with ThreadPoolExecutor() as upload_executor:
             uploader_futures: list[Future[list[tuple[ScratchFile, MediaMetadata | None]]]] = []
             for uploader in configuration.uploaders():
                 uploader_futures.append(upload_executor.submit(uploader.upload_and_preprocess, medias))
             for future in uploader_futures:
-                out_medias.extend(future.result())
+                try:
+                    out_medias.extend(future.result())
+                except Exception as e:
+                    if not isinstance(e, (CancelledError, TimeoutError)):
+                        logger.exception(f"Error while running uploader: {e}")
+                        continue
+                    else:
+                        raise
 
         logger.debug(f"Uploaders were processed. Returning {len(out_medias)} files...")
 
@@ -398,7 +402,7 @@ def main() -> None:
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         return executor.submit(upload_handler, medias)
 
-    with ThreadPoolExecutor(thread_name_prefix="Uploader", max_workers=max_workers) as callback_executor:
+    with ThreadPoolExecutor(thread_name_prefix="Uploader") as callback_executor:
         # Preparing
         prepare_kwargs = {
             "shutdown_event": shutdown_event,
@@ -409,23 +413,25 @@ def main() -> None:
             "event_loop": loop,
         }
 
-        with ThreadPoolExecutor(
-            thread_name_prefix="Setup",
-            max_workers=max_workers,
-        ) as setup_executor:
+        with ThreadPoolExecutor(thread_name_prefix="Setup") as setup_executor:
             logger.debug("Preparing...")
-            setup_futures: list[Future[None]] = []
+            setup_futures: list[tuple[Uploader | Middleware | Watcher, Future[None]]] = []
             for uploader in configuration.uploaders():
                 future = setup_executor.submit(uploader.prepare, **prepare_kwargs)
-                setup_futures.append(future)
+                setup_futures.append((uploader, future))
             for middleware in configuration.middlewares():
                 future = setup_executor.submit(middleware.prepare, **prepare_kwargs)
-                setup_futures.append(future)
+                setup_futures.append((middleware, future))
             for watcher in configuration.watchers():
                 future = setup_executor.submit(watcher.prepare, **prepare_kwargs)
-                setup_futures.append(future)
-            for future in setup_futures:
-                future.result()
+                setup_futures.append((watcher, future))
+            for item, future in setup_futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    if not isinstance(e, (CancelledError, TimeoutError)):
+                        logger.exception(f"Error while preparing {item}: {e}")
+                    raise
             logger.debug("Done.")
 
         # Start watchers
@@ -435,15 +441,14 @@ def main() -> None:
                 watcher.start()
         logger.debug("Done.")
 
-        with ThreadPoolExecutor(thread_name_prefix="AsyncRunner", max_workers=max_workers) as runner_executor:
-            loop.set_default_executor(runner_executor)
-            try:
-                logger.info("Running...")
-                while not shutdown_event.is_set():
-                    loop.run_forever()  # We do this for any libraries that need asyncio
-            except KeyboardInterrupt:
-                logger.info("Keyboard interrupt received, shutting down...")
-                shutdown_event.set()
+        # loop.set_default_executor(runner_executor)  # There is no need to do this, asyncio handles it for us
+        try:
+            logger.info("Running...")
+            while not shutdown_event.is_set():
+                loop.run_forever()  # We do this for any libraries that need asyncio
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received, shutting down...")
+            shutdown_event.set()
 
         logger.debug("Closing watchers...")
         for watcher in configuration.watchers():

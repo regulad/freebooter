@@ -23,8 +23,8 @@ from typing import Generator, ClassVar
 
 from tor_python_easy.tor_control_port_client import TorControlPortClient
 
-from .uploaders import Uploader
 from .middlewares import Middleware
+from .uploaders import Uploader
 from .watchers import Watcher
 
 

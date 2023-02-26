@@ -22,16 +22,16 @@ from logging import WARNING, INFO, NullHandler
 from typing import Any, AsyncGenerator, cast
 
 import discord
-from jishaku import Jishaku, Flags
 from discord import Client, Intents, Message
 from discord.ext.commands.bot import Bot
+from jishaku import Jishaku, Flags
 from jishaku.features.python import PythonFeature
 from jishaku.repl import Scope
 
 from .common import AsyncioWatcher
-from ..middlewares import Middleware
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, Platform, MediaType
+from ..middlewares import Middleware
 
 null_handler = NullHandler()
 discord.utils.setup_logging(level=INFO if __debug__ else WARNING, root=False, handler=null_handler)

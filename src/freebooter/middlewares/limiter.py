@@ -68,21 +68,31 @@ class Limiter(Middleware):
     def process_many(
         self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
     ) -> list[tuple[ScratchFile, MediaMetadata | None]]:
+        real_medias = False
+        for media in medias:
+            file, metadata = media
+            if metadata is not None:
+                real_medias = True
+
+        if not real_medias:
+            # There is no processing to do, since there is no media to limit.
+            return medias
+
+        # It's important to do this in a lock so we don't have more than one thing waiting at the same time
         with self._lock:
             # If the start time + the period is before right now, reset everything.
+
+            # In a previous version of freebooter, this check was always performed, even if there was no real media.
+            # This has a large performance impact as it would cause threads to be blocked for a long time and not
+            # released. It is now only performed if there is a real media, which is much more efficient. It does not
+            # matter at all when this is called, only that it is called before the current count is incremented.
             if (self._counter_started_at + self._current_period) < datetime.now():
                 self._counter_started_at = datetime.now()
                 self._current_period = self.random_period_length()
                 self._current_count = 0
 
             # Increment the amount in this period, if the medias are real.
-            real_medias = False
-            for media in medias:
-                file, metadata = media
-                if metadata is not None:
-                    real_medias = True
-            if real_medias:
-                self._current_count += 1
+            self._current_count += 1
 
             if self._current_count > self._max_amount_per_period:
                 self.logger.debug(

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from .collector import *
 from .common import *
-from .ignorer import *
 from .dropper import *
+from .ignorer import *
 from .limiter import *
 from .metadata import *

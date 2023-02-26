@@ -16,11 +16,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from .file_management import *
 from .config import *
+from .file_management import *
 from .metadata import *
 from .middlewares import *
 from .uploaders import *
 from .watchers import *
 
-version = "1.7.4"
+version = "1.7.5"

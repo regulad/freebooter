@@ -22,12 +22,11 @@ from logging import WARNING, INFO, NullHandler, getLogger
 from typing import Any, AsyncGenerator
 
 from selfcord import Client, Message
-from selfcord.ext.commands.bot import Bot
 
 from .common import AsyncioWatcher
-from ..middlewares import Middleware
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, Platform, MediaType
+from ..middlewares import Middleware
 
 null_handler = NullHandler()
 getLogger("selfcord").setLevel(INFO if __debug__ else WARNING)
