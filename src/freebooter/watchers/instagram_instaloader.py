@@ -29,6 +29,7 @@ from instaloader import (
     Post,
     NodeIterator,
     ProfileNotExistsException,
+    QueryReturnedNotFoundException,
 )
 from mariadb import ConnectionPool
 from requests import Session
@@ -198,13 +199,14 @@ class InstaloaderWatcher(ThreadWatcher):
         if self._username is not None:
             try:
                 self._profile = Profile.from_username(self._iloader.context, self._username)
-            except ProfileNotExistsException:
+            except ProfileNotExistsException | QueryReturnedNotFoundException:
                 if self._userid:
                     self.logger.warning(
                         f"Profile with username {self._username} does not exist, using userid instead."
                     )
                     self._profile = Profile.from_id(self._iloader.context, self._userid)
                 else:
+                    self.logger.warning(f"Profile with username {self._username} does not exist!")
                     raise
         elif self._userid is not None:
             self._profile = Profile.from_id(self._iloader.context, self._userid)
