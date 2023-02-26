@@ -199,7 +199,7 @@ class Watcher(metaclass=ABCMeta):
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
         assert self._callback, "No callback set!"
 
-        self.logger.debug(f"Preprocessing {len(downloaded)} files...")
+        self.logger.info(f"{self.name} found {len(downloaded)} new uploads, processing...")
 
         preprocessed: list[tuple[ScratchFile, MediaMetadata | None]] = cast(
             "list[tuple[ScratchFile, MediaMetadata | None]]",
@@ -211,7 +211,7 @@ class Watcher(metaclass=ABCMeta):
 
         # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
         # code is concurrent
-        def cleanup(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
+        def _cleanup_callback(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
             try:
                 result = done_future.result(timeout=0)
             except TimeoutError:
@@ -235,7 +235,7 @@ class Watcher(metaclass=ABCMeta):
 
         fut = self._callback(preprocessed)
 
-        fut.add_done_callback(cleanup)
+        fut.add_done_callback(_cleanup_callback)
 
         return fut
 
@@ -368,8 +368,6 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
                 downloaded = []
 
             if downloaded:
-                self.logger.info(f"{self.name} found {len(downloaded)} new uploads, passing them on...")
-
                 start = time.perf_counter()
                 self.process(downloaded)
                 elapsed = time.perf_counter() - start
