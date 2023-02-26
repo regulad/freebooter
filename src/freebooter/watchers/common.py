@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABCMeta
 from asyncio import AbstractEventLoop, Task
 from concurrent.futures import Future
@@ -254,7 +255,7 @@ class AsyncioWatcher(Watcher):
         self._prepare_task: Task | None = None
         self._closing_task: Task | None = None
 
-    async def _a_preprocess_and_execute(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
+    async def aprocess(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
         """
         A coroutine that preprocesses and executes the given medias.
         :param medias: The medias to preprocess and execute
@@ -268,7 +269,7 @@ class AsyncioWatcher(Watcher):
 
         list_of_medias = await asyncio_future
 
-        return [media for _, media in list_of_medias if media is not None]
+        return [metadata for _, metadata in list_of_medias if metadata is not None]
 
     async def async_prepare(self) -> None:
         """
@@ -348,6 +349,10 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
         if self._shutdown_event is not None and self._shutdown_event.is_set():
             self.join()  # just wait for it to spin down
 
+    def process(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
+        fut = self._preprocess_and_execute(medias)
+        return [metadata for _, metadata in fut.result() if metadata is not None]
+
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"
         assert self._shutdown_event is not None, "Watcher is not ready, cannot run thread!"
@@ -365,9 +370,13 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
             if downloaded:
                 self.logger.info(f"{self.name} found {len(downloaded)} new uploads, passing them on...")
 
-                self._preprocess_and_execute(downloaded)
+                start = time.perf_counter()
+                self.process(downloaded)
+                elapsed = time.perf_counter() - start
+            else:
+                elapsed = 0.0
 
-            self._shutdown_event.wait(self.SLEEP_TIME)
+            self._shutdown_event.wait(max(self.SLEEP_TIME - elapsed, 0.0))
 
 
 class YTDLThreadWatcher(ThreadWatcher, metaclass=ABCMeta):

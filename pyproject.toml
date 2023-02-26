@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "freebooter"
-version = "1.7.0"
+version = "1.7.1"
 description = "freebooter downloads photos & videos from the internet and uploads it onto your social media accounts."
 authors = ["Parker Wahle <regulad@regulad.xyz>"]
 license = "GPLv3"
@@ -41,7 +41,7 @@ tweepy = "^4.12.1"  # more mature than stweet
 tor-python-easy = "^0.1.5"
 discord-py = {extras = ["speed"], version = "^2.1.1"}
 jishaku = {extras = ["discordpy"], version = "^2.5.1"}
-selfcord-py = {git = "https://github.com/dolfies/discord.py-self.git", rev = "renamed"}
+selfcord-py = {git = "https://github.com/dolfies/discord.py-self.git", rev = "renamed", extras = ["speed"]}
 
 [tool.poetry.group.dev.dependencies]
 tox = "^4.4.5"

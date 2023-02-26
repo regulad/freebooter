@@ -126,7 +126,7 @@ class DiscordPyWatcher(AsyncioWatcher):
             medias.append((scratch_file, media_metadata))
 
         if medias:
-            return await self._a_preprocess_and_execute(medias)
+            return await self.aprocess(medias)
         else:
             return []
 
