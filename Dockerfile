@@ -32,7 +32,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 LABEL maintainer="Parker Wahle <regulad@regulad.xyz>" \
       name="freebooter" \
-      version="1.7.3"
+      version="1.7.4"
 
 # Add curl for MariaDB script
 RUN apt update && apt upgrade -y && apt install -y curl
