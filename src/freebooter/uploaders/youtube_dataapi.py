@@ -20,9 +20,10 @@ from __future__ import annotations
 import typing
 from difflib import get_close_matches
 from io import IOBase
-from logging import Logger
 from logging import getLogger
+from threading import Lock
 from traceback import format_exc
+from typing import ClassVar
 from typing import TYPE_CHECKING, cast
 from typing import TypedDict
 
@@ -50,7 +51,7 @@ if TYPE_CHECKING:
     )
     from googleapiclient._apis.youtube.v3.schemas import Video
 
-logger: Logger = getLogger(__name__)
+logger = getLogger(__name__)
 
 # Maximum number of times to retry before giving up.
 MAX_RETRIES = 10
@@ -77,6 +78,12 @@ class DesktopAppClientSecrets(TypedDict):
 
 
 class YouTubeDataAPIV3Uploader(Uploader):
+    """
+    Uploads content to YouTube using the YouTube Data API v3.
+    """
+
+    glock: ClassVar[Lock] = Lock()
+
     def __init__(
         self,
         name: str,

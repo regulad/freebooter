@@ -26,8 +26,8 @@ import typing
 from enum import Enum, auto
 from logging import getLogger, INFO, WARNING
 from pathlib import Path
-from threading import Lock, Event
-from typing import Any, Literal
+from threading import Lock
+from typing import Any, Literal, ClassVar
 
 import ffmpeg
 from PIL import Image
@@ -51,7 +51,7 @@ from urllib3 import Retry
 
 from .common import Uploader
 from .._assets import ASSETS
-from ..file_management import ScratchFile, FileManager
+from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 
@@ -72,6 +72,8 @@ class InstagrapiUploader(Uploader):
     """
     Uploads media to Instagram using the instagrapi library.
     """
+
+    glock: ClassVar[Lock] = Lock()
 
     def __init__(
         self,
@@ -312,8 +314,8 @@ class InstagrapiUploader(Uploader):
         self._iclient.public.close()
         super().close()
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
-        super().prepare(shutdown_event, file_manager, **kwargs)
+    def prepare(self, **kwargs) -> None:
+        super().prepare(**kwargs)
 
         self._load_iclient()
         instagram_login_success = self._iclient.login(self._username, self._password)

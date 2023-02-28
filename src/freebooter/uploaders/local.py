@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from shutil import copyfile
+from threading import Lock
+from typing import ClassVar
 
 from .common import Uploader
 from ..file_management import ScratchFile
@@ -30,6 +32,8 @@ class LocalMediaStorage(Uploader):
     """
     "Uploads" media by saving it to a local directory.
     """
+
+    glock: ClassVar[Lock] = Lock()
 
     def __init__(
         self,

@@ -17,7 +17,6 @@
 """
 from __future__ import annotations
 
-from logging import Logger
 from logging import getLogger
 from traceback import format_exc
 from typing import Generator
@@ -27,7 +26,7 @@ from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware
 
-logger: Logger = getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
@@ -36,7 +35,7 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
     """
 
     MYSQL_TYPE = "CHAR(24)"
-    SLEEP_TIME = 60 * 60 * 1  # one hour
+    sleep_time = 60 * 60 * 1  # one hour
 
     def __init__(
         self,
@@ -154,9 +153,6 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
                 prepared = self._prepare_video(video["id"], self._copy)
                 if prepared is not None:
                     ready_prepared.append(prepared)
-
-            if self._copy:
-                self._copy = False
 
             return ready_prepared
         except Exception as e:

@@ -17,12 +17,15 @@
 """
 from __future__ import annotations
 
+from concurrent.futures import Future
 from queue import Queue
 from threading import Lock
+from typing import cast
 
 from .common import *
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
+from ..types import UploadCallback
 
 
 class Collector(Middleware):
@@ -46,11 +49,46 @@ class Collector(Middleware):
         """
         Closes the middleware.
         """
+        self.flush()
+        self._media.join()
         super().close()
+
+    def flush(self) -> None:
+        self.logger.debug("Flushing collector queue...")
+
+        callback: UploadCallback | None = self._prepare_kwargs.get("callback")
+
+        if callback is None:
+            raise RuntimeError("Collector middleware requires a callback to be set.")
+
         while not self._media.empty():
-            got_media = self._media.get()
-            self.logger.debug(f"Releasing media {got_media[1].id} ON CLOSE.")
-            got_media[0].close()
+            split_medias: list[tuple[ScratchFile, MediaMetadata]] = []
+
+            while len(split_medias) < self._count and not self._media.empty():
+                got_media = self._media.get()
+                file, metadata = got_media
+                self.logger.debug(f"Flushing media {metadata.id}.")
+                split_medias.append(got_media)
+
+            self.logger.info(f"Sending {len(split_medias)} media(s) out-of-lifecycle...")
+
+            def _affirm_result(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
+                try:
+                    result = done_future.result(timeout=0)
+                except TimeoutError:
+                    result = None
+
+                if result is None:
+                    self.logger.error(f"{self.name} upload callback failed!")
+                else:
+                    self.logger.debug(f"{self.name} upload callback finished.")
+
+            # needs to be cast because mypy doesn't understand that the second element of the tuple being none doesn't
+            # break the type of the union
+            fut = callback(cast("list[tuple[ScratchFile, MediaMetadata | None]]", split_medias))
+
+            fut.add_done_callback(lambda _: self._media.task_done())
+            fut.add_done_callback(_affirm_result)
 
     def process_many(
         self, medias: list[tuple[ScratchFile, MediaMetadata | None]]
@@ -80,8 +118,19 @@ class Collector(Middleware):
 
             while len(mut_medias) < self._count and not self._media.empty():
                 got_media = self._media.get()
-                self.logger.debug(f"Releasing media {got_media[1].id}.")
+                file, metadata = got_media
+                self.logger.debug(f"Releasing media {metadata.id}.")
                 mut_medias.append(got_media)
+                self._media.task_done()
+
+            if not self._media.empty() and len(medias) > self._count:
+                # We need to split the post into multiple posts.
+                # If we let it collect on its own, we would have medias that would leak into the next post.
+                # This is done by releasing the media that we have collected so far.
+                # The rest of the media will be released in the next call to this method.
+                self.logger.debug("Flushing out remaining posts...")
+
+                self.flush()
 
             return mut_medias
 

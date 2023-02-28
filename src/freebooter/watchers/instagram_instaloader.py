@@ -17,7 +17,6 @@
 """
 from __future__ import annotations
 
-from asyncio import AbstractEventLoop
 from os import environ
 from pathlib import Path
 from threading import Event, Lock, Thread
@@ -32,11 +31,10 @@ from instaloader import (
     QueryReturnedNotFoundException,
     QueryReturnedBadRequestException,
 )
-from mariadb import ConnectionPool
 from requests import Session
 
-from .common import ThreadWatcher, UploadCallback
-from ..file_management import ScratchFile, FileManager
+from .common import ThreadWatcher
+from ..file_management import ScratchFile
 from ..metadata import MediaMetadata, MediaType, Platform
 from ..middlewares import Middleware
 from ..util import FrozenDict
@@ -59,7 +57,7 @@ DEFAULT_INSTALOADER_INITIALIZED = Event()
 
 
 class InstaloaderWatcher(ThreadWatcher):
-    SLEEP_TIME = 60 * 30  # 30 minutes
+    sleep_time = 60 * 30  # 30 minutes
 
     def __init__(
         self,
@@ -70,8 +68,6 @@ class InstaloaderWatcher(ThreadWatcher):
         instaloader_kwargs: dict[str, Any] | None = None,
         proxies: dict[str, str] | None = None,
         # Watcher Configuration
-        backtrack: bool = False,
-        copy: bool = False,
         use_default_instaloader: bool = True,
         # Username to watch
         username: str | None = None,
@@ -79,9 +75,6 @@ class InstaloaderWatcher(ThreadWatcher):
         **config,
     ) -> None:
         super().__init__(name, preprocessors, **config)
-
-        self._copy = copy
-        self._backtrack = backtrack
 
         # build off of defaults
         self._iloader_kwargs: dict[str, Any] | None
@@ -113,16 +106,8 @@ class InstaloaderWatcher(ThreadWatcher):
         assert self._iloader is not None, "InstaloaderWatcher not prepared!"
         return self._iloader.context._session  # noqa
 
-    def prepare(
-        self,
-        shutdown_event: Event,
-        callback: UploadCallback,
-        pool: ConnectionPool,
-        file_manager: FileManager,
-        event_loop: AbstractEventLoop,
-        **kwargs,
-    ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager, event_loop, **kwargs)
+    def prepare(self, **kwargs) -> None:
+        super().prepare(**kwargs)
 
         assert self._file_manager is not None, "File manager was not set!"
 
@@ -173,7 +158,9 @@ class InstaloaderWatcher(ThreadWatcher):
                     # will shut down properly. This is because the default instaloader is a singleton, and we can't
                     # have it be shut down by any of the individual instances of this class.
                     def safe_shutdown() -> None:
-                        shutdown_event.wait()
+                        assert self._shutdown_event is not None, "Shutdown event was not set!"
+
+                        self._shutdown_event.wait()
                         DEFAULT_INSTALOADER.close()
                         return
 
@@ -226,8 +213,12 @@ class InstaloaderWatcher(ThreadWatcher):
         # by default returns most recent to oldest
 
         posts_final: NodeIterator[Post] | list[Post]
-        if self._backtrack:
+        if self._backtrack != 0:
             posts_final = list(posts)
+
+            if self._backtrack is not None:
+                posts_final = posts_final[: self._backtrack]
+
             posts_final.reverse()
         else:
             # we only need the newest post
@@ -267,9 +258,6 @@ class InstaloaderWatcher(ThreadWatcher):
             yield file, metadata
 
             self.mark_handled(post.shortcode)
-
-        if self._copy:
-            self._copy = False
 
     def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
         return list(self._check_for_uploads_generator())

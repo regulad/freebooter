@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import warnings
 from io import FileIO
-from logging import getLogger, Logger
+from logging import getLogger
 from pathlib import Path
 from random import choice
 from string import ascii_letters
@@ -28,7 +28,7 @@ from typing import Literal, TYPE_CHECKING
 
 from .util import WeakList
 
-logger: Logger = getLogger(__name__)
+logger = getLogger(__name__)
 
 if TYPE_CHECKING:
     FILE_IO_MODE = Literal["r", "w", "x", "a", "r+", "w+", "x+", "a+"]

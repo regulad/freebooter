@@ -400,7 +400,26 @@ def main() -> None:
         *,
         executor: Executor,
     ) -> Future[list[tuple[ScratchFile, MediaMetadata | None]]]:
-        return executor.submit(upload_handler, medias)
+        # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
+        # code is concurrent
+        def _cleanup_callback(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
+            try:
+                result = done_future.result(timeout=0)
+            except TimeoutError:
+                result = None
+
+            if result is None:
+                logger.debug("Upload was cancelled. Closing files...")
+            else:
+                logger.debug("Upload was completed. Closing files...")
+                for scratch_file, _ in result:
+                    if not scratch_file.closed:
+                        scratch_file.close()
+
+        fut = executor.submit(upload_handler, medias)
+        fut.add_done_callback(_cleanup_callback)
+
+        return fut
 
     with ThreadPoolExecutor(thread_name_prefix="Uploader") as callback_executor:
         # Preparing

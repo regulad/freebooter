@@ -49,8 +49,6 @@ class DiscordPyWatcher(AsyncioWatcher):
         channels: list[int],
         discord_client_kwargs: dict[str, Any] | None = None,
         jishaku_prefix: str | None = "]",
-        backtrack: int | None = 0,
-        copy: bool = False,
         **config,
     ) -> None:
         """
@@ -73,9 +71,6 @@ class DiscordPyWatcher(AsyncioWatcher):
         self._channels: set[int] = set(channels)  # memory optimization
         self._discord_client_kwargs: dict[str, Any] = discord_client_kwargs or {}
         self._jishaku_prefix = jishaku_prefix
-
-        self._backtrack = backtrack
-        self._copy = copy
 
         self._discord_connection_task: Task | None = None
         self._backtrack_task: Task | None = None
@@ -125,7 +120,7 @@ class DiscordPyWatcher(AsyncioWatcher):
         ):
             medias.append((scratch_file, media_metadata))
 
-        if medias:
+        if medias or self._process_if_empty:
             return await self.aprocess(medias)
         else:
             return []

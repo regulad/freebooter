@@ -15,13 +15,15 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+from __future__ import annotations
 
-from . import types as types
-from .config import *
-from .file_management import *
-from .metadata import *
-from .middlewares import *
-from .uploaders import *
-from .watchers import *
+from concurrent.futures import Future
+from typing import TypeAlias, Callable
 
-version = "1.8.0"
+from .file_management import ScratchFile
+from .metadata import MediaMetadata
+
+UploadCallback: TypeAlias = Callable[
+    [list[tuple[ScratchFile, MediaMetadata | None]]],
+    Future[list[tuple[ScratchFile, MediaMetadata | None]]],
+]

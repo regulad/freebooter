@@ -32,6 +32,7 @@ class Pusher(ThreadWatcher):
     MYSQL_TYPE = None
 
     def __init__(self, name: str, preprocessors: list[Middleware], *, interval: int, **config) -> None:
+        config.setdefault("process_if_empty", True)
         super().__init__(name, preprocessors, **config)
 
         self.SLEEP_TIME = interval

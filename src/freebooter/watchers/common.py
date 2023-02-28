@@ -28,31 +28,25 @@ from os import sep
 from pathlib import Path
 from threading import Event
 from threading import Thread
-from typing import Callable, Any, cast
-from typing import TYPE_CHECKING, TypeAlias
+from typing import Any, cast, ClassVar
 
 from mariadb import ConnectionPool, Connection, Cursor
-from yt_dlp import YoutubeDL
 
 from ..file_management import FileManager
 from ..file_management import ScratchFile
 from ..metadata import MediaMetadata
 from ..middlewares import Middleware
+from ..types import UploadCallback
 
-if TYPE_CHECKING:
-    UploadCallback: TypeAlias = Callable[
-        [list[tuple[ScratchFile, MediaMetadata | None]]],
-        Future[list[tuple[ScratchFile, MediaMetadata | None]]],
-    ]
-    # This is the type of the callback that is called when a watcher finds new media. You plug in the list of tuples
-    # of the downloaded file and the metadata for the upload. You receive a future that will be set when the upload
-    # is complete. This future contains the ScratchFile of the uploaded file and the MediaMetadata of the uploaded
-    # file on the platform it was uploaded to.
-else:
-    # This is here to allow other modules to import this module during runtime when TYPE_CHECKING is False
-    UploadCallback = object
+logger = getLogger(__name__)
 
-logger: Logger = getLogger(__name__)
+# I don't trust yt-dlp to be backwards compatible with youtube_dl *perfectly*, so I'm going to try to import yt-dlp
+# first, and for any errors, I'll fall back to youtube_dl.
+try:
+    from yt_dlp import YoutubeDL  # type: ignore
+except ImportError:
+    logger.warning("yt-dlp failed to compile or not found, falling back to youtube_dl")
+    from youtube_dl import YoutubeDL  # type: ignore
 
 
 class Watcher(metaclass=ABCMeta):
@@ -60,12 +54,16 @@ class Watcher(metaclass=ABCMeta):
     This class is the base class for all watchers. It contains some common functionality that all watchers need.
     """
 
-    MYSQL_TYPE: str | None = "VARCHAR(255)"
+    MYSQL_TYPE: ClassVar[str | None] = "VARCHAR(255)"
 
     def __init__(
         self,
         name: str,
         preprocessors: list[Middleware],
+        *,
+        copy: bool = False,
+        backtrack: int | None = 0,
+        process_if_empty: bool = False,
         **config,
     ) -> None:
         if not hasattr(self, "name"):  # for subclasses that inherit from thread
@@ -79,6 +77,10 @@ class Watcher(metaclass=ABCMeta):
         self._mariadb_pool: ConnectionPool | None = None
         self._file_manager: FileManager | None = None
         self._loop: AbstractEventLoop | None = None
+
+        self._backtrack = backtrack
+        self._copy = copy
+        self._process_if_empty = process_if_empty
 
         self._extra_kwargs: dict[str, Any] = config.copy()
         self._extra_prep_kwargs: dict[str, Any] = {}
@@ -99,11 +101,6 @@ class Watcher(metaclass=ABCMeta):
 
     def prepare(
         self,
-        shutdown_event: Event,
-        callback: UploadCallback,
-        pool: ConnectionPool,
-        file_manager: FileManager,
-        event_loop: AbstractEventLoop,
         **kwargs,
     ) -> None:
         if self.ready:
@@ -112,13 +109,13 @@ class Watcher(metaclass=ABCMeta):
         self.logger.debug(f"Preparing {self.name}...")
 
         for middleware in self.preprocessors:
-            middleware.prepare(shutdown_event, file_manager, **kwargs)
+            middleware.prepare(**kwargs)
 
-        self._shutdown_event = shutdown_event
-        self._callback = callback
-        self._mariadb_pool = pool
-        self._file_manager = file_manager
-        self._loop = event_loop
+        self._shutdown_event = kwargs["shutdown_event"]
+        self._callback = kwargs["callback"]
+        self._mariadb_pool = kwargs["pool"]
+        self._file_manager = kwargs["file_manager"]
+        self._loop = kwargs["event_loop"]
 
         self._extra_prep_kwargs |= kwargs
 
@@ -209,33 +206,22 @@ class Watcher(metaclass=ABCMeta):
         for preprocessor in self.preprocessors:
             preprocessed = preprocessor.process_many(preprocessed)
 
-        # The following is a bit dirty, but it is very difficult to close out the files since the rest of the
-        # code is concurrent
-        def _cleanup_callback(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
+        def _affirm_result(done_future: Future[list[tuple[ScratchFile, MediaMetadata | None]]]) -> None:
             try:
                 result = done_future.result(timeout=0)
             except TimeoutError:
                 result = None
 
             if result is None:
-                self.logger.error(f"{self.name} upload callback failed! Closing files and exiting...")
-                if downloaded is not None:
-                    for scratch_file, _ in downloaded:
-                        if not scratch_file.closed:
-                            self.logger.debug(f"Closing {scratch_file}...")
-                            scratch_file.close()
+                self.logger.error(f"{self.name} upload callback failed!")
             else:
-                self.logger.debug(f"{self.name} upload callback finished, closing files...")
-                for scratch_file, _ in result:
-                    if not scratch_file.closed:
-                        self.logger.debug(f"Closing {scratch_file}...")
-                        scratch_file.close()
+                self.logger.debug(f"{self.name} upload callback finished.")
 
         self.logger.debug(f"Calling back with {len(preprocessed)} medias... ")
 
         fut = self._callback(preprocessed)
 
-        fut.add_done_callback(_cleanup_callback)
+        fut.add_done_callback(_affirm_result)
 
         return fut
 
@@ -304,18 +290,12 @@ class AsyncioWatcher(Watcher):
     def ready(self) -> bool:
         return super().ready and self._prepare_task is not None and self._prepare_task.done()
 
-    def prepare(
-        self,
-        shutdown_event: Event,
-        callback: UploadCallback,
-        pool: ConnectionPool,
-        file_manager: FileManager,
-        event_loop: AbstractEventLoop,
-        **kwargs,
-    ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager, event_loop, **kwargs)
+    def prepare(self, **kwargs) -> None:
+        super().prepare(**kwargs)
 
-        self._prepare_task = event_loop.create_task(self.async_prepare())
+        assert self._loop is not None, "No event loop set!"
+
+        self._prepare_task = self._loop.create_task(self.async_prepare())
 
 
 class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I know thread clobbers the name
@@ -323,7 +303,8 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
     This thread watches a channel on a streaming server for new videos and downloads them and then calls the return_call
     """
 
-    SLEEP_TIME: float = 60.0
+    # Instance variable for special handling of the sleep_time
+    sleep_time: float = 60.0
 
     def __init__(
         self,
@@ -366,6 +347,11 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
             except Exception as e:
                 self.logger.exception(f"Error checking for new uploads: {e}")
                 downloaded = []
+            else:
+                if self._copy:
+                    self._copy = False
+                if self._backtrack:
+                    self._backtrack = False
 
             if downloaded:
                 start = time.perf_counter()
@@ -374,7 +360,7 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
             else:
                 elapsed = 0.0
 
-            self._shutdown_event.wait(max(self.SLEEP_TIME - elapsed, 0.0))
+            self._shutdown_event.wait(max(self.sleep_time - elapsed, 0.0))
 
 
 class YTDLThreadWatcher(ThreadWatcher, metaclass=ABCMeta):
@@ -429,16 +415,8 @@ class YTDLThreadWatcher(ThreadWatcher, metaclass=ABCMeta):
         del self._downloader  # ytdl does some closing but not openly
         self._downloader = None
 
-    def prepare(
-        self,
-        shutdown_event: Event,
-        callback: UploadCallback,
-        pool: ConnectionPool,
-        file_manager: FileManager,
-        event_loop: AbstractEventLoop,
-        **kwargs,
-    ) -> None:
-        super().prepare(shutdown_event, callback, pool, file_manager, event_loop, **kwargs)
+    def prepare(self, **kwargs) -> None:
+        super().prepare(**kwargs)
 
         assert self._downloader is None, "Downloader already initialized"
         assert self._file_manager is not None, "File manager not initialized"
@@ -452,6 +430,5 @@ __all__ = (
     "Watcher",
     "AsyncioWatcher",
     "ThreadWatcher",
-    "UploadCallback",
     "YTDLThreadWatcher",
 )

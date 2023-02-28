@@ -18,7 +18,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Generator
+from threading import Lock
+from typing import Any, Generator, ClassVar
 
 import ffmpeg
 from PIL import Image
@@ -41,6 +42,8 @@ class TweepyTwitterUploader(Uploader):
     """
     An uploader that uses the tweepy Python package to upload media to Twitter.
     """
+
+    glock: ClassVar[Lock] = Lock()
 
     def __init__(
         self,

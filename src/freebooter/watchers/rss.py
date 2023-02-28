@@ -169,9 +169,6 @@ class RSSWatcher(YTDLThreadWatcher):
                 if parsed_entry is not None
             ]
 
-            if self._copy:
-                self._copy = False
-
             return run
 
 
@@ -180,8 +177,8 @@ class RedditWatcher(RSSWatcher):
     A version of RSSWatcher that is specifically for Reddit RSS urls.
     """
 
-    # MYSQL_TYPE = "CHAR(10)"  # doesn't work with other types of posts
-    SLEEP_TIME = 60 * 5  # Reddit API advises 2 minutes, but it is unlikely something pops up every 2 minutes
+    # MYSQL_TYPE = "CHAR(10)"  # doesn't work with other types of posts besides simple images
+    sleep_time = 60 * 5  # Reddit API advises 2 minutes, but it is unlikely something pops up every 2 minutes
 
     def get_media_url(self, entry: FeedParserDict) -> str | None:
         """

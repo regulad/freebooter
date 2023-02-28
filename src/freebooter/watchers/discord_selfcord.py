@@ -43,8 +43,6 @@ class SelfcordWatcher(AsyncioWatcher):
         token: str,
         channels: list[int],
         discord_client_kwargs: dict[str, Any] | None = None,
-        backtrack: int | None = 0,
-        copy: bool = False,
         **config,
     ) -> None:
         """
@@ -64,9 +62,6 @@ class SelfcordWatcher(AsyncioWatcher):
         self._token = token
         self._channels: set[int] = set(channels)  # memory optimization
         self._discord_client_kwargs: dict[str, Any] = discord_client_kwargs or {}
-
-        self._backtrack = backtrack
-        self._copy = copy
 
         self._discord_connection_task: Task | None = None
         self._backtrack_task: Task | None = None
@@ -116,7 +111,7 @@ class SelfcordWatcher(AsyncioWatcher):
         ):
             medias.append((scratch_file, media_metadata))
 
-        if medias:
+        if medias or self._process_if_empty:
             return await self.aprocess(medias)
         else:
             return []

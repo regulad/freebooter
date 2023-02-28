@@ -40,7 +40,6 @@ class LocalMediaLoader(ThreadWatcher):
         preprocessors: list[Middleware],
         *,
         path: str,
-        copy: bool = False,
         **config,
     ) -> None:
         directory_path = Path(path)
@@ -55,7 +54,6 @@ class LocalMediaLoader(ThreadWatcher):
             raise ValueError(f"{directory_path} is not a directory!")
 
         self._directory = directory_path
-        self._copy = copy
 
         super().__init__(name, preprocessors, **config)
 
@@ -103,9 +101,6 @@ class LocalMediaLoader(ThreadWatcher):
 
     def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
         run = list(self._check_in_folder(self._directory, handle_if_already_handled=self._copy))
-
-        if self._copy:
-            self._copy = False
 
         return run
 

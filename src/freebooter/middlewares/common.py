@@ -20,6 +20,7 @@ from __future__ import annotations
 from abc import ABCMeta
 from logging import Logger, getLogger
 from threading import Event
+from typing import Any
 
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata
@@ -39,6 +40,9 @@ class Middleware(metaclass=ABCMeta):
         self._file_manager: FileManager | None = None
         self._shutdown_event: Event | None = None
 
+        self._config = config
+        self._prepare_kwargs: dict[str, Any] = {}
+
     @property
     def logger(self) -> Logger:
         return getLogger(self.name)
@@ -53,13 +57,15 @@ class Middleware(metaclass=ABCMeta):
         """
         self.logger.debug(f"Closing middleware {self.name}.")
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
+    def prepare(self, **kwargs) -> None:
         assert not self.ready, "Middleware is already ready."
 
         self.logger.debug(f"Preparing middleware {self.name}...")
 
-        self._shutdown_event = shutdown_event
-        self._file_manager = file_manager
+        self._shutdown_event = kwargs["shutdown_event"]
+        self._file_manager = kwargs["file_manager"]
+
+        self._prepare_kwargs |= kwargs
 
         assert self.ready, "Middleware failed to prepare."
 

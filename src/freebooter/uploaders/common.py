@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from logging import getLogger, Logger
-from threading import Event
-from typing import cast
+from threading import Event, Lock
+from typing import cast, ClassVar
 
 from ..file_management import ScratchFile, FileManager
 from ..metadata import MediaMetadata
@@ -33,11 +33,18 @@ class Uploader(metaclass=ABCMeta):
     They are a thread to allow the execution of background tasks.
     """
 
-    def __init__(self, name: str, preprocessors: list[Middleware], **config) -> None:
+    # This is necessary to reduce the chance of too many connections to the internet being opened in parallel and
+    # causing a timeout error, connection ended error, or other similar error.
+    glock: ClassVar[Lock] = Lock()
+
+    def __init__(
+        self, name: str, preprocessors: list[Middleware], *, run_concurrently: bool = False, **config
+    ) -> None:
         self.name = f"{self.__class__.__name__}-{name.title().replace(' ', '-')}"
 
         self._shutdown_event: Event | None = None
         self._file_manager: FileManager | None = None
+        self._run_concurrently = run_concurrently
         self.preprocessors = preprocessors
 
     @property
@@ -52,16 +59,16 @@ class Uploader(metaclass=ABCMeta):
             and all(middleware.ready for middleware in self.preprocessors)
         )
 
-    def prepare(self, shutdown_event: Event, file_manager: FileManager, **kwargs) -> None:
+    def prepare(self, **kwargs) -> None:
         assert not self.ready, "Uploader is already ready!"
 
         self.logger.debug(f"Preparing uploader {self.name}...")
 
-        self._shutdown_event = shutdown_event
-        self._file_manager = file_manager
+        self._shutdown_event = kwargs["shutdown_event"]
+        self._file_manager = kwargs["file_manager"]
 
         for middleware in self.preprocessors:
-            middleware.prepare(shutdown_event, file_manager)
+            middleware.prepare(**kwargs)
 
         assert self.ready, "Uploader failed to prepare."
 
@@ -84,7 +91,13 @@ class Uploader(metaclass=ABCMeta):
                 # mypy also fucks up this cast
                 [media for media in medias if media[1] is not None],
             )
-            real_uploads = self.upload(valid_medias)
+
+            if self._run_concurrently:
+                real_uploads = self.upload(valid_medias)
+            else:
+                with self.glock:
+                    real_uploads = self.upload(valid_medias)
+
             uploaded.extend(real_uploads)
 
             # Add the leftovers

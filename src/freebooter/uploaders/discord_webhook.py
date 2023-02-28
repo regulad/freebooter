@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import random
 from datetime import datetime
-from typing import Generator
+from threading import Lock
+from typing import Generator, ClassVar
 
 import discord
 from discord import SyncWebhook, SyncWebhookMessage, Embed, Color
@@ -38,6 +39,8 @@ class DiscordWebhookUploader(Uploader):
     """
     Uploads content to a Discord webhook.
     """
+
+    glock: ClassVar[Lock] = Lock()
 
     def __init__(
         self,
