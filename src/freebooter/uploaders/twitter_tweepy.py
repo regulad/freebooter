@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import time
+from logging import DEBUG
 from threading import Lock
 from typing import Any, Generator, ClassVar
 
@@ -146,7 +147,7 @@ class TweepyTwitterUploader(Uploader):
                             ffmpeg.input(str(file.path.resolve()))
                             .filter("scale", height="720")
                             .output(str(mp4_scratch.path.resolve()))
-                            .run()
+                            .run(quiet=not self.logger.isEnabledFor(DEBUG))
                         )
 
                         # Send it!!

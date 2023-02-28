@@ -24,7 +24,7 @@ import re
 import time
 import typing
 from enum import Enum, auto
-from logging import getLogger, INFO, WARNING
+from logging import getLogger, INFO, WARNING, DEBUG
 from pathlib import Path
 from threading import Lock
 from typing import Any, Literal, ClassVar
@@ -379,7 +379,11 @@ class InstagrapiUploader(Uploader):
 
             # Even though instagram claims to support MP4, MOV, and MKV, I've found that it only works with MP4
             # *reliably*.
-            (ffmpeg.input(str(media.path.resolve())).output(str(mp4_scratch.path.resolve())).run())
+            (
+                ffmpeg.input(str(media.path.resolve()))
+                .output(str(mp4_scratch.path.resolve()))
+                .run(quiet=not self.logger.isEnabledFor(DEBUG))
+            )
 
             match video_type:
                 case InstagramVideoType.VIDEO:
