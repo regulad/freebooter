@@ -92,13 +92,14 @@ class Uploader(metaclass=ABCMeta):
                 [media for media in medias if media[1] is not None],
             )
 
-            if self._run_concurrently:
-                real_uploads = self.upload(valid_medias)
-            else:
-                with self.glock:
+            if valid_medias:
+                if self._run_concurrently:
                     real_uploads = self.upload(valid_medias)
+                else:
+                    with self.glock:
+                        real_uploads = self.upload(valid_medias)
 
-            uploaded.extend(real_uploads)
+                uploaded.extend(real_uploads)
 
             # Add the leftovers
             uploaded.extend(media for media in medias if media[1] is None)
