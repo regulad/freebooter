@@ -141,7 +141,7 @@ class RSSWatcher(YTDLThreadWatcher):
                             file.write(chunk)
 
                     metadata = MediaMetadata(
-                        media_id=entry_id,
+                        media_id=entry.id,
                         platform=Platform.from_url(entry["link"]),
                         title=entry["title"],
                         description=entry["summary"],
@@ -151,7 +151,6 @@ class RSSWatcher(YTDLThreadWatcher):
                         data=dict(entry),
                     )
 
-            self.mark_handled(entry.id)
             return media, metadata
         except Exception as e:
             self.logger.error(f"Error while parsing entry {entry_id}: {e}")

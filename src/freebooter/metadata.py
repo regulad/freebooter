@@ -138,7 +138,7 @@ class MediaMetadata:
     def __init__(
         self,
         *,
-        media_id: str,
+        media_id: Any,
         platform: Platform = Platform.UNKNOWN,
         title: str | None = None,
         description: str | None = None,
@@ -206,7 +206,7 @@ class MediaMetadata:
         return self._data
 
     @property
-    def id(self) -> str:
+    def id(self) -> Any:
         return self._id
 
     @property

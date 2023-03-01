@@ -26,7 +26,7 @@ from logging import Logger
 from logging import getLogger
 from os import sep
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from threading import Thread
 from typing import Any, cast, ClassVar
 
@@ -212,6 +212,9 @@ class Watcher(metaclass=ABCMeta):
             except TimeoutError:
                 result = None
 
+            for _, metadata in downloaded:
+                self.mark_handled(metadata.id)
+
             if result is None:
                 self.logger.error(f"{self.name} upload callback failed!")
             else:
@@ -241,21 +244,24 @@ class AsyncioWatcher(Watcher):
         self._prepare_task: Task | None = None
         self._closing_task: Task | None = None
 
+        self._process_lock = asyncio.Lock()
+
     async def aprocess(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
         """
         A coroutine that preprocesses and executes the given medias.
         :param medias: The medias to preprocess and execute
         :return: A future that resolves to the processed medias
         """
-        assert self._loop is not None, "No event loop set!"
+        async with self._process_lock:
+            assert self._loop is not None, "No event loop set!"
 
-        asyncio_future_concurrent_future = self._loop.run_in_executor(None, self._preprocess_and_execute, medias)
-        concurrent_future = await asyncio_future_concurrent_future
-        asyncio_future = asyncio.wrap_future(concurrent_future, loop=self._loop)
+            asyncio_future_concurrent_future = self._loop.run_in_executor(None, self._preprocess_and_execute, medias)
+            concurrent_future = await asyncio_future_concurrent_future
+            asyncio_future = asyncio.wrap_future(concurrent_future, loop=self._loop)
 
-        list_of_medias = await asyncio_future
+            list_of_medias = await asyncio_future
 
-        return [metadata for _, metadata in list_of_medias if metadata is not None]
+            return [metadata for _, metadata in list_of_medias if metadata is not None]
 
     async def async_prepare(self) -> None:
         """
@@ -317,6 +323,8 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
         Thread.__init__(self, name=self._name)
         Watcher.__init__(self, self.name, preprocessors, **config)
 
+        self._process_lock = Lock()
+
     def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
         """
         Checks for new uploads and downloads them.
@@ -331,8 +339,9 @@ class ThreadWatcher(Thread, Watcher, metaclass=ABCMeta):  # type: ignore  # I kn
             self.join()  # just wait for it to spin down
 
     def process(self, medias: list[tuple[ScratchFile, MediaMetadata]]) -> list[MediaMetadata]:
-        fut = self._preprocess_and_execute(medias)
-        return [metadata for _, metadata in fut.result() if metadata is not None]
+        with self._process_lock:
+            fut = self._preprocess_and_execute(medias)
+            return [metadata for _, metadata in fut.result() if metadata is not None]
 
     def run(self) -> None:
         assert self.ready, "Watcher is not ready, cannot run thread!"

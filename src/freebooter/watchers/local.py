@@ -85,7 +85,7 @@ class LocalMediaLoader(ThreadWatcher):
                     media_type = MediaType.from_file_path(file)
 
                 metadata = MediaMetadata(
-                    media_id=file.stem,
+                    media_id=file.name,
                     platform=Platform.OTHER,
                     title=file.stem,
                     description="",
@@ -94,8 +94,6 @@ class LocalMediaLoader(ThreadWatcher):
                     media_type=media_type,
                     data=data,
                 )
-
-                self.mark_handled(file.name)
 
                 yield scratch_file, metadata
 

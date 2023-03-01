@@ -92,7 +92,6 @@ class YTDLYouTubeChannelWatcher(YTDLThreadWatcher):
         else:
             try:
                 scratch_file, metadata = self._download(video_id)
-                self.mark_handled(video_id, True)
                 return scratch_file, metadata
             except Exception as e:
                 self.logger.exception(f"Error downloading video {video_id}: {e}")

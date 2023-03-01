@@ -89,7 +89,7 @@ class SelfcordWatcher(AsyncioWatcher):
             await attachment.save(scratch_file.path)  # discord.py messed up the typing on this
 
             media_metadata = MediaMetadata(
-                media_id=str(attachment.id),
+                media_id=attachment.id,
                 platform=Platform.DISCORD,
                 title=attachment.filename,
                 description=message.content,
@@ -98,8 +98,6 @@ class SelfcordWatcher(AsyncioWatcher):
             )
 
             yield scratch_file, media_metadata
-
-            self.mark_handled(attachment.id)
 
     async def process_message(
         self, message: Message, *, handle_if_already_handled: bool = False

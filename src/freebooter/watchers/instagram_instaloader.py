@@ -257,8 +257,6 @@ class InstaloaderWatcher(ThreadWatcher):
 
             yield file, metadata
 
-            self.mark_handled(post.shortcode)
-
     def check_for_uploads(self) -> list[tuple[ScratchFile, MediaMetadata]]:
         return list(self._check_for_uploads_generator())
 
