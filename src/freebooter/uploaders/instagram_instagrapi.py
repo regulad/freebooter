@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -416,9 +417,11 @@ class InstagrapiUploader(Uploader):
                                         self.upload_video(
                                             media,
                                             metadata,
-                                            InstagramVideoType.REELS
-                                            if self._mode == "hybrid"
-                                            else InstagramVideoType.VIDEO,
+                                            (
+                                                InstagramVideoType.REELS
+                                                if self._mode == "hybrid"
+                                                else InstagramVideoType.VIDEO
+                                            ),
                                         ),
                                     )
                                 )
