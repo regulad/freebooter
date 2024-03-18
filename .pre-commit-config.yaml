@@ -3,7 +3,7 @@ default_language_version:
 default_stages: [commit, push]
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v4.5.0
   hooks:
     - id: check-yaml
     - id: end-of-file-fixer
@@ -23,11 +23,11 @@ repos:
   hooks:
     - id: dockerfile_lint
 - repo: https://github.com/psf/black
-  rev: 23.1.0
+  rev: 24.3.0
   hooks:
   - id: black
 - repo: https://github.com/python-poetry/poetry
-  rev: 1.4.0
+  rev: 1.8.0
   hooks:
     - id: poetry-check
 #    - id: poetry-lock  # broken on pre-commit.ci
